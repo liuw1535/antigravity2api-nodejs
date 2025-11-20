@@ -1,27 +1,33 @@
 # Antigravity to OpenAI API 代理服务
 
-将 Google Antigravity API 转换为 OpenAI 兼容格式的代理服务，支持流式和非流式响应。
+将 Google Antigravity API 转换为 OpenAI 兼容格式的代理服务，支持流式响应、工具调用和多账号管理。
 
 ## 功能特性
 
 - ✅ OpenAI API 兼容格式
-- ✅ 支持流式和非流式响应
-- ✅ 自动 Token 管理和刷新
-- ✅ 多账户支持
-- ✅ 思维链输出（thinking）
-- ✅ 完整的日志记录
+- ✅ 流式和非流式响应
+- ✅ 工具调用（Function Calling）支持
+- ✅ 多账号自动轮换
+- ✅ Token 自动刷新
+- ✅ API Key 认证
+- ✅ 思维链（Thinking）输出
+- ✅ 图片输入支持（Base64 编码）
+
+## 环境要求
+
+- Node.js >= 18.0.0
 
 ## 快速开始
 
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 配置
+### 2. 配置文件
 
-编辑 `config.json` 配置文件：
+编辑 `config.json` 配置服务器和 API 参数：
 
 ```json
 {
@@ -29,127 +35,200 @@ npm install
     "port": 8045,
     "host": "0.0.0.0"
   },
-  "api": {
-    "url": "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-    "modelsUrl": "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels",
-    "host": "daily-cloudcode-pa.sandbox.googleapis.com",
-    "userAgent": "antigravity/1.11.3 windows/amd64"
-  },
-  "defaults": {
-    "temperature": 1,
-    "top_p": 0.85,
-    "top_k": 100,
-    "max_tokens": 8096
-  },
   "security": {
-    "maxRequestSize": "50mb",
-    "apiKey": "your-api-key-here"
+    "apiKey": "sk-text"
   }
 }
 ```
 
-配置说明：
-- `apiKey`: 设置 API Key 以保护 /v1 端点，留空或设为 null 则不启用验证
-
-### 账户登录
-
-运行 OAuth 服务器进行账户授权：
+### 3. 登录获取 Token
 
 ```bash
 npm run login
 ```
 
-按照提示完成 Google 账户授权，账户信息将保存在 `accounts.json`。
+浏览器会自动打开 Google 授权页面，授权后 Token 会保存到 `accounts.json`。
 
-### 启动服务
+### 4. 启动服务
 
 ```bash
 npm start
 ```
 
-开发模式（自动重启）：
+服务将在 `http://localhost:8045` 启动。
+
+## API 使用
+
+### 获取模型列表
 
 ```bash
-npm run dev
+curl http://localhost:8045/v1/models \
+  -H "Authorization: Bearer sk-text"
 ```
 
-## API 端点
-
-### 获取可用模型
-
-```bash
-GET http://localhost:8045/v1/models
-```
-
-### 聊天补全
-
-```bash
-POST http://localhost:8045/v1/chat/completions
-Content-Type: application/json
-
-{
-  "model": "claude-sonnet-4-5-thinking",
-  "messages": [
-    {"role": "user", "content": "Hello"}
-  ],
-  "stream": true
-}
-```
-
-## 使用示例
-
-### cURL
+### 聊天补全（流式）
 
 ```bash
 curl http://localhost:8045/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key-here" \
+  -H "Authorization: Bearer sk-text" \
   -d '{
-    "model": "claude-sonnet-4-5-thinking",
+    "model": "gemini-2.0-flash-exp",
     "messages": [{"role": "user", "content": "你好"}],
     "stream": true
   }'
 ```
 
-### Python
+### 聊天补全（非流式）
 
-```python
-import openai
+```bash
+curl http://localhost:8045/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-text" \
+  -d '{
+    "model": "gemini-2.0-flash-exp",
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": false
+  }'
+```
 
-client = openai.OpenAI(
-    base_url="http://localhost:8045/v1",
-    api_key="your-api-key-here"
-)
+### 工具调用示例
 
-response = client.chat.completions.create(
-    model="claude-sonnet-4-5-thinking",
-    messages=[{"role": "user", "content": "你好"}],
-    stream=True
-)
+```bash
+curl http://localhost:8045/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-text" \
+  -d '{
+    "model": "gemini-2.0-flash-exp",
+    "messages": [{"role": "user", "content": "北京天气怎么样"}],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "获取天气信息",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {"type": "string", "description": "城市名称"}
+          }
+        }
+      }
+    }]
+  }'
+```
 
-for chunk in response:
-    print(chunk.choices[0].delta.content, end="")
+### 图片输入示例
+
+支持 Base64 编码的图片输入，兼容 OpenAI 的多模态格式：
+
+```bash
+curl http://localhost:8045/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-text" \
+  -d '{
+    "model": "gemini-2.0-flash-exp",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "这张图片里有什么？"},
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+          }
+        }
+      ]
+    }],
+    "stream": true
+  }'
+```
+
+支持的图片格式：
+- JPEG/JPG (`data:image/jpeg;base64,...`)
+- PNG (`data:image/png;base64,...`)
+- GIF (`data:image/gif;base64,...`)
+- WebP (`data:image/webp;base64,...`)
+
+## 多账号管理
+
+`accounts.json` 支持多个账号，服务会自动轮换使用：
+
+```json
+[
+  {
+    "access_token": "ya29.xxx",
+    "refresh_token": "1//xxx",
+    "expires_in": 3599,
+    "timestamp": 1234567890000,
+    "enable": true
+  },
+  {
+    "access_token": "ya29.yyy",
+    "refresh_token": "1//yyy",
+    "expires_in": 3599,
+    "timestamp": 1234567890000,
+    "enable": true
+  }
+]
+```
+
+- `enable: false` 可禁用某个账号
+- Token 过期会自动刷新
+- 刷新失败（403）会自动禁用并切换下一个账号
+
+## 配置说明
+
+### config.json
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `server.port` | 服务端口 | 8045 |
+| `server.host` | 监听地址 | 0.0.0.0 |
+| `security.apiKey` | API 认证密钥 | sk-text |
+| `security.maxRequestSize` | 最大请求体大小 | 50mb |
+| `defaults.temperature` | 默认温度参数 | 1 |
+| `defaults.top_p` | 默认 top_p | 0.85 |
+| `defaults.top_k` | 默认 top_k | 50 |
+| `defaults.max_tokens` | 默认最大 token 数 | 8096 |
+| `systemInstruction` | 系统提示词 | - |
+
+## 开发命令
+
+```bash
+# 启动服务
+npm start
+
+# 开发模式（自动重启）
+npm run dev
+
+# 登录获取 Token
+npm run login
 ```
 
 ## 项目结构
 
 ```
 .
-├── server.js          # 主服务器
-├── api.js             # API 调用逻辑
-├── oauth-server.js    # OAuth 授权服务器
-├── token_manager.js   # Token 管理
-├── utils.js           # 工具函数
-├── logger.js          # 日志模块
-├── config.json        # 配置文件
-├── accounts.json      # 账户信息（自动生成）
-└── package.json       # 项目配置
+├── server.js           # 主服务器
+├── api.js              # API 调用逻辑
+├── oauth-server.js     # OAuth 登录服务
+├── token_manager.js    # Token 管理
+├── utils.js            # 工具函数
+├── logger.js           # 日志模块
+├── config.js           # 配置加载
+├── config.json         # 配置文件
+├── accounts.json       # Token 存储（自动生成）
+└── package.json        # 项目配置
 ```
 
-## 环境要求
+## 注意事项
 
-- Node.js >= 18.0.0
+1. 首次使用需要运行 `npm run login` 获取 Token
+2. `accounts.json` 包含敏感信息，请勿泄露
+3. API Key 可在 `config.json` 中自定义
+4. 支持多账号轮换，提高可用性
+5. Token 会自动刷新，无需手动维护
 
-## 许可证
+## License
 
 MIT
