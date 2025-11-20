@@ -3,6 +3,11 @@ import config from '../config/config.js';
 
 export async function generateAssistantResponse(requestBody, callback) {
   const token = await tokenManager.getToken();
+  
+  if (!token) {
+    throw new Error('没有可用的token，请运行 npm run login 获取token');
+  }
+  
   const url = config.api.url;
   
   const response = await fetch(url, {
@@ -10,7 +15,7 @@ export async function generateAssistantResponse(requestBody, callback) {
     headers: {
       'Host': config.api.host,
       'User-Agent': config.api.userAgent,
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${token.access_token}`,
       'Content-Type': 'application/json',
       'Accept-Encoding': 'gzip'
     },
@@ -19,6 +24,10 @@ export async function generateAssistantResponse(requestBody, callback) {
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403) {
+      tokenManager.disableCurrentToken(token);
+      throw new Error(`该账号没有使用权限，已自动禁用。错误详情: ${errorText}`);
+    }
     throw new Error(`API请求失败 (${response.status}): ${errorText}`);
   }
 
@@ -85,12 +94,16 @@ export async function generateAssistantResponse(requestBody, callback) {
 export async function getAvailableModels() {
   const token = await tokenManager.getToken();
   
+  if (!token) {
+    throw new Error('没有可用的token，请运行 npm run login 获取token');
+  }
+  
   const response = await fetch(config.api.modelsUrl, {
     method: 'POST',
     headers: {
       'Host': config.api.host,
       'User-Agent': config.api.userAgent,
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${token.access_token}`,
       'Content-Type': 'application/json',
       'Accept-Encoding': 'gzip'
     },

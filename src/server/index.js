@@ -49,8 +49,8 @@ app.get('/v1/models', async (req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
+  const { messages, model, stream = true, tools, ...params} = req.body;
   try {
-    const { messages, model, stream = true, tools, ...params} = req.body;
     
     if (!messages) {
       return res.status(400).json({ error: 'messages is required' });
@@ -129,7 +129,31 @@ app.post('/v1/chat/completions', async (req, res) => {
   } catch (error) {
     logger.error('生成响应失败:', error.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
+      if (stream) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        const id = `chatcmpl-${Date.now()}`;
+        const created = Math.floor(Date.now() / 1000);
+        res.write(`data: ${JSON.stringify({
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model,
+          choices: [{ index: 0, delta: { content: `错误: ${error.message}` }, finish_reason: null }]
+        })}\n\n`);
+        res.write(`data: ${JSON.stringify({
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model,
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+        })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } else {
+        res.status(500).json({ error: error.message });
+      }
     }
   }
 });

@@ -87,6 +87,7 @@ class TokenManager {
   }
 
   disableToken(token) {
+    log.warn(`禁用token`)
     token.enable = false;
     this.saveToFile();
     this.loadTokens();
@@ -102,9 +103,8 @@ class TokenManager {
         if (this.isExpired(token)) {
           await this.refreshToken(token);
         }
-        const accessToken = token.access_token;
         this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
-        return accessToken;
+        return token;
       } catch (error) {
         if (error.statusCode === 403) {
           log.warn(`Token ${this.currentIndex} 刷新失败(403)，禁用并尝试下一个`);
@@ -120,6 +120,13 @@ class TokenManager {
     return null;
   }
 
+  disableCurrentToken(token) {
+    const found = this.tokens.find(t => t.access_token === token.access_token);
+    if (found) {
+      this.disableToken(found);
+    }
+  }
+
   async handleRequestError(error, currentAccessToken) {
     if (error.statusCode === 403) {
       log.warn('请求遇到403错误，尝试刷新token');
@@ -128,7 +135,7 @@ class TokenManager {
         try {
           await this.refreshToken(currentToken);
           log.info('Token刷新成功，返回新token');
-          return currentToken.access_token;
+          return currentToken;
         } catch (refreshError) {
           if (refreshError.statusCode === 403) {
             log.warn('刷新token也遇到403，禁用并切换到下一个');
