@@ -47,7 +47,7 @@ npm install
 npm run login
 ```
 
-浏览器会自动打开 Google 授权页面，授权后 Token 会保存到 `accounts.json`。
+浏览器会自动打开 Google 授权页面，授权后 Token 会保存到 `data/accounts.json`。
 
 ### 4. 启动服务
 
@@ -151,7 +151,7 @@ curl http://localhost:8045/v1/chat/completions \
 
 ## 多账号管理
 
-`accounts.json` 支持多个账号，服务会自动轮换使用：
+`data/accounts.json` 支持多个账号，服务会自动轮换使用：
 
 ```json
 [
@@ -209,22 +209,30 @@ npm run login
 
 ```
 .
-├── server.js           # 主服务器
-├── api.js              # API 调用逻辑
-├── oauth-server.js     # OAuth 登录服务
-├── token_manager.js    # Token 管理
-├── utils.js            # 工具函数
-├── logger.js           # 日志模块
-├── config.js           # 配置加载
-├── config.json         # 配置文件
-├── accounts.json       # Token 存储（自动生成）
-└── package.json        # 项目配置
+├── data/
+│   └── accounts.json       # Token 存储（自动生成）
+├── scripts/
+│   └── oauth-server.js     # OAuth 登录服务
+├── src/
+│   ├── api/
+│   │   └── client.js       # API 调用逻辑
+│   ├── auth/
+│   │   └── token_manager.js # Token 管理
+│   ├── config/
+│   │   └── config.js       # 配置加载
+│   ├── server/
+│   │   └── index.js        # 主服务器
+│   └── utils/
+│       ├── logger.js       # 日志模块
+│       └── utils.js        # 工具函数
+├── config.json             # 配置文件
+└── package.json            # 项目配置
 ```
 
 ## 注意事项
 
 1. 首次使用需要运行 `npm run login` 获取 Token
-2. `accounts.json` 包含敏感信息，请勿泄露
+2. `data/accounts.json` 包含敏感信息，请勿泄露
 3. API Key 可在 `config.json` 中自定义
 4. 支持多账号轮换，提高可用性
 5. Token 会自动刷新，无需手动维护
