@@ -1,22 +1,7 @@
-import { randomUUID } from 'crypto';
 import config from '../config/config.js';
+import tokenManager from '../auth/token_manager.js';
+import { generateRequestId } from './idGenerator.js';
 
-function generateRequestId() {
-  return `agent-${randomUUID()}`;
-}
-
-function generateSessionId() {
-  return String(-Math.floor(Math.random() * 9e18));
-}
-
-function generateProjectId() {
-  const adjectives = ['useful', 'bright', 'swift', 'calm', 'bold'];
-  const nouns = ['fuze', 'wave', 'spark', 'flow', 'core'];
-  const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-  const randomNum = Math.random().toString(36).substring(2, 7);
-  return `${randomAdj}-${randomNoun}-${randomNum}`;
-}
 function extractImagesFromContent(content) {
   const result = { text: '', images: [] };
 
@@ -183,7 +168,12 @@ function convertOpenAIToolsToAntigravity(openaiTools){
     }
   })
 }
-function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
+async function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
+  const token = await tokenManager.getToken();
+  if (!token) {
+    throw new Error('没有可用的token，请运行 npm run login 获取token');
+  }
+  
   const enableThinking = modelName.endsWith('-thinking') || 
     modelName === 'gemini-2.5-pro' || 
     modelName.startsWith('gemini-3-pro-') ||
@@ -192,7 +182,7 @@ function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
   const actualModelName = modelName.endsWith('-thinking') ? modelName.slice(0, -9) : modelName;
   
   return{
-    project: generateProjectId(),
+    project: token.projectId,
     requestId: generateRequestId(),
     request: {
       contents: openaiMessageToAntigravity(openaiMessages),
@@ -207,7 +197,7 @@ function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
         }
       },
       generationConfig: generateGenerationConfig(parameters, enableThinking, actualModelName),
-      sessionId: generateSessionId()
+      sessionId: token.sessionId
     },
     model: actualModelName,
     userAgent: "antigravity"
@@ -215,7 +205,5 @@ function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
 }
 export{
   generateRequestId,
-  generateSessionId,
-  generateProjectId,
   generateRequestBody
 }

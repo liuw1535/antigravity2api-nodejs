@@ -56,7 +56,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       return res.status(400).json({ error: 'messages is required' });
     }
     
-    const requestBody = generateRequestBody(messages, model, params, tools);
+    const requestBody = await generateRequestBody(messages, model, params, tools);
     //console.log(JSON.stringify(requestBody,null,2));
     
     if (stream) {

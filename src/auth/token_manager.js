@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log } from '../utils/logger.js';
+import { generateProjectId, generateSessionId } from '../utils/idGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,19 +15,36 @@ class TokenManager {
     this.filePath = filePath;
     this.tokens = [];
     this.currentIndex = 0;
-    this.loadTokens();
+    this.initialize();
   }
 
-  loadTokens() {
+  initialize() {
     try {
-      log.info('正在加载token...');
+      log.info('正在初始化token管理器...');
       const data = fs.readFileSync(this.filePath, 'utf8');
-      const tokenArray = JSON.parse(data);
-      this.tokens = tokenArray.filter(token => token.enable !== false);
+      let tokenArray = JSON.parse(data);
+      let needSave = false;
+      
+      tokenArray = tokenArray.map(token => {
+        if (!token.projectId) {
+          token.projectId = generateProjectId();
+          needSave = true;
+        }
+        return token;
+      });
+      
+      if (needSave) {
+        fs.writeFileSync(this.filePath, JSON.stringify(tokenArray, null, 2), 'utf8');
+      }
+      
+      this.tokens = tokenArray.filter(token => token.enable !== false).map(token => ({
+        ...token,
+        sessionId: generateSessionId()
+      }));
       this.currentIndex = 0;
       log.info(`成功加载 ${this.tokens.length} 个可用token`);
     } catch (error) {
-      log.error('加载token失败:', error.message);
+      log.error('初始化token失败:', error.message);
       this.tokens = [];
     }
   }
@@ -77,7 +95,10 @@ class TokenManager {
       
       this.tokens.forEach(memToken => {
         const index = allTokens.findIndex(t => t.refresh_token === memToken.refresh_token);
-        if (index !== -1) allTokens[index] = memToken;
+        if (index !== -1) {
+          const { sessionId, ...tokenToSave } = memToken;
+          allTokens[index] = tokenToSave;
+        }
       });
       
       fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
@@ -90,7 +111,8 @@ class TokenManager {
     log.warn(`禁用token`)
     token.enable = false;
     this.saveToFile();
-    this.loadTokens();
+    this.tokens = this.tokens.filter(t => t.refresh_token !== token.refresh_token);
+    this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
   }
 
   async getToken() {
@@ -106,8 +128,9 @@ class TokenManager {
         this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
         return token;
       } catch (error) {
-        if (error.statusCode === 403) {
-          log.warn(`Token ${this.currentIndex} 刷新失败(403)，禁用并尝试下一个`);
+        if (error.statusCode === 403 || error.statusCode === 400) {
+          const accountNum = this.currentIndex + 1;
+          log.warn(`账号 ${accountNum}: Token 已失效或错误，已自动禁用该账号`);
           this.disableToken(token);
         } else {
           log.error(`Token ${this.currentIndex} 刷新失败:`, error.message);
@@ -125,29 +148,6 @@ class TokenManager {
     if (found) {
       this.disableToken(found);
     }
-  }
-
-  async handleRequestError(error, currentAccessToken) {
-    if (error.statusCode === 403) {
-      log.warn('请求遇到403错误，尝试刷新token');
-      const currentToken = this.tokens[this.currentIndex];
-      if (currentToken && currentToken.access_token === currentAccessToken) {
-        try {
-          await this.refreshToken(currentToken);
-          log.info('Token刷新成功，返回新token');
-          return currentToken;
-        } catch (refreshError) {
-          if (refreshError.statusCode === 403) {
-            log.warn('刷新token也遇到403，禁用并切换到下一个');
-            this.disableToken(currentToken);
-            return await this.getToken();
-          }
-          log.error('刷新token失败:', refreshError.message);
-        }
-      }
-      return await this.getToken();
-    }
-    return null;
   }
 }
 const tokenManager = new TokenManager();
