@@ -159,7 +159,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       const hasRule = requestBody.request.systemInstruction.parts.some(p => p.text && p.text.includes(DONE_MARKER));
       if (!hasRule) {
         requestBody.request.systemInstruction.parts.push({ text: ANTI_TRUNCATION_RULE });
-        logger.debug('已注入反截断 System Instruction');
+        logger.info('已注入反截断 System Instruction');
       }
     }
 
@@ -196,7 +196,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
           while (currentAttempt < MAX_CONTINUATION_ATTEMPTS && !foundDoneMarker) {
             currentAttempt++;
-            logger.debug(`反截断处理: 第 ${currentAttempt} 次尝试`);
+            logger.info(`反截断处理: 第 ${currentAttempt} 次尝试`);
 
             // 如果不是第一次尝试，需要构建续传的 payload
             if (currentAttempt > 1) {
