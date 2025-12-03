@@ -14,7 +14,15 @@ const app = express();
 // --- 反截断配置 (Anti-Truncation Config) ---
 const DONE_MARKER = "[done]";
 const MAX_CONTINUATION_ATTEMPTS = config.tokenReuse.retryCount || 3;
-const CONTINUATION_PROMPT = `请从刚才被截断的地方继续输出剩余的所有内容。
+const CONTINUATION_PROMPT = `
+生成以下随机序列，保证本次输出与上次输出的非一致性：
+{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
+{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
+{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
+{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
+{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}
+序列结束。
+请从刚才被截断的地方继续输出剩余的所有内容。
 重要提醒：
 1. 不要重复前面已经输出的内容
 2. 直接继续输出，无需任何前言或解释
