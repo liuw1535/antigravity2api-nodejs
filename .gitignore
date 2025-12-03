@@ -2,7 +2,10 @@
 node_modules/
 
 # 账户信息
-# accounts.json
+accounts.json
+
+# 包配置文件
+pnpm-lock.yaml
 
 # 日志
 *.log
