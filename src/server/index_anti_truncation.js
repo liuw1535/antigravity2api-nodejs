@@ -135,7 +135,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const isImageModel = model.includes('-image');
     // 如果是生图模型或有工具调用，通常不需要反截断逻辑，或者逻辑不同，这里暂且只对普通文本流开启
-    const shouldApplyAntiTruncation = enable_anti_truncation && !isImageModel && !tools && stream;
+    const shouldApplyAntiTruncation = enable_anti_truncation && !isImageModel && !tools;
 
     let requestBody = generateRequestBody(messages, model, params, tools, token);
 
@@ -389,6 +389,8 @@ app.post('/v1/chat/completions', async (req, res) => {
                 logger.info(`非流式反截断: 未检测到结束标记，准备第 ${currentAttempt + 1} 次尝试...`);
              }
           }
+
+          await new Promise(resolve => setTimeout(resolve, config.tokenReuse.retryDelay || 3000));
         }
 
         if (!foundDoneMarker) {
