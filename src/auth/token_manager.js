@@ -159,6 +159,8 @@ class TokenManager {
         }
         if (this.is429Released(token)) {
           this.unset429(token);
+          await this.refreshToken(token); // 顺便刷新一下token吧
+          token.sessionId = generateSessionId(); // 刷新一下session
         }
         if (token.temp_forbidden) {
           this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
