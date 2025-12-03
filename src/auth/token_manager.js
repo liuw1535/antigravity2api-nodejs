@@ -41,7 +41,8 @@ class TokenManager {
       
       this.tokens = tokenArray.filter(token => token.enable !== false).map(token => ({
         ...token,
-        sessionId: generateSessionId()
+        sessionId: generateSessionId(),
+        usedCount: 0
       }));
       this.currentIndex = 0;
       log.info(`成功加载 ${this.tokens.length} 个可用token`);
@@ -165,7 +166,8 @@ class TokenManager {
           this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
           continue;
         }
-        this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+        if (token.usedCount >= config.tokenReuse.singleTokenUseCount) this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+        token.usedCount++;
         return token;
       } catch (error) {
         if (error.statusCode === 403 || error.statusCode === 400) {

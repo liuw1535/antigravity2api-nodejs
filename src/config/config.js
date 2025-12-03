@@ -70,6 +70,11 @@ const config = {
   useNativeAxios: process.env.USE_NATIVE_AXIOS !== 'false',
   timeout: parseInt(process.env.TIMEOUT) || 30000,
   proxy: process.env.PROXY || null,
+  tokenReuse: {
+    retryCount: parseInt(process.env.RETRY_COUNT) || 3,
+    retryDelay: parseInt(process.env.RETRY_DELAY) || 3000,
+    singleTokenUseCount: parseInt(process.env.SINGLE_TOKEN_USE_COUNT) || 10
+  },
   systemInstruction: process.env.SYSTEM_INSTRUCTION || '你是聊天机器人，名字叫萌萌，如同名字这般，你的性格是软软糯糯萌萌哒的，专门为用户提供聊天和情绪价值，协助进行小说创作或者角色扮演'
 };
 

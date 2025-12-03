@@ -13,7 +13,7 @@ const app = express();
 
 // --- 反截断配置 (Anti-Truncation Config) ---
 const DONE_MARKER = "[done]";
-const MAX_CONTINUATION_ATTEMPTS = 3;
+const MAX_CONTINUATION_ATTEMPTS = config.tokenReuse.retryCount || 3;
 const CONTINUATION_PROMPT = `请从刚才被截断的地方继续输出剩余的所有内容。
 重要提醒：
 1. 不要重复前面已经输出的内容
@@ -272,7 +272,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             // 出现429后更换token
             if (tokenManager.is429(token)) {
               logger.warn("反截断: 429 错误，更换 token...");
-              token = await getToken();
+              token = await tokenManager.getToken();
               requestBody = changeRequestBodyToken(requestBody, token);
             }
 
@@ -291,7 +291,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             }
 
             // 等待3秒再进行下一次请求
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, config.tokenReuse.retryDelay || 3000));
           }
 
           if (!foundDoneMarker) {
@@ -302,29 +302,140 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
       }
     } else {
-      // 非流式响应处理 (保持原逻辑，也可以加上类似的递归逻辑，但通常流式才是痛点)
-      const { content, toolCalls } = await generateAssistantResponseNoStream(requestBody, token);
-      
-      // 简单处理：如果是文本且非工具调用，尝试移除 [done] 标记
-      let finalContent = content;
-      if (!toolCalls || toolCalls.length === 0) {
-        finalContent = removeDoneMarker(content);
+     // === 非流式反截断处理 ===
+      if (isImageModel || !shouldApplyAntiTruncation) {
+        // 标准非流式处理
+        const { content, toolCalls } = await generateAssistantResponseNoStream(requestBody, token);
+        
+        // 简单清洗一下以防万一
+        let finalContent = content;
+        if (!toolCalls || toolCalls.length === 0) {
+            finalContent = removeDoneMarker(content);
+        }
+
+        const message = { role: 'assistant', content: finalContent };
+        if (toolCalls.length > 0) message.tool_calls = toolCalls;
+        
+        res.json({
+          id,
+          object: 'chat.completion',
+          created,
+          model,
+          choices: [{
+            index: 0,
+            message,
+            finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
+          }]
+        });
+      } else {
+        // 启用反截断的非流式
+        let currentAttempt = 0;
+        let fullContent = "";
+        let finalToolCalls = [];
+        let foundDoneMarker = false;
+
+        while (currentAttempt < MAX_CONTINUATION_ATTEMPTS && !foundDoneMarker) {
+          currentAttempt++;
+          logger.info(`非流式反截断: 第 ${currentAttempt} 次尝试`);
+
+          // 续传时构建 Payload
+          if (currentAttempt > 1) {
+            const newContents = [...originalContents];
+            
+            // 1. 添加目前为止生成的全部内容作为模型历史
+            newContents.push({
+              role: "model",
+              parts: [{ text: fullContent }]
+            });
+
+            // 2. 添加续写提示
+            let contentSummary = fullContent.length > 200 
+              ? `...${fullContent.slice(-100)}` 
+              : fullContent;
+            
+            newContents.push({
+              role: "user",
+              parts: [{ text: `${CONTINUATION_PROMPT}\n\n前面内容结尾: "${contentSummary}"` }]
+            });
+
+            requestBody.request.contents = newContents;
+          }
+
+          const response = await generateAssistantResponseNoStream(requestBody, token);
+
+          // 出现429后更换token
+          if (tokenManager.is429(token)) {
+            logger.warn("反截断: 429 错误，更换 token...");
+            token = await tokenManager.getToken();
+            requestBody = changeRequestBodyToken(requestBody, token);
+          }
+          
+          // 如果有工具调用，通常意味着生成结束
+          if (response.toolCalls && response.toolCalls.length > 0) {
+            finalToolCalls = response.toolCalls;
+            fullContent += response.content || "";
+            foundDoneMarker = true; // 工具调用视为结束
+            break;
+          }
+
+          const newPart = response.content || "";
+          fullContent += newPart;
+
+          if (newPart.toLowerCase().includes(DONE_MARKER)) {
+            foundDoneMarker = true;
+            logger.info("非流式反截断: 检测到结束标记");
+          } else {
+             if (currentAttempt < MAX_CONTINUATION_ATTEMPTS) {
+                logger.info(`非流式反截断: 未检测到结束标记，准备第 ${currentAttempt + 1} 次尝试...`);
+             }
+          }
+        }
+
+        if (!foundDoneMarker) {
+          logger.warn("非流式反截断: 达到最大尝试次数，强制结束");
+        }
+
+        // 最终清洗
+        const cleanedContent = removeDoneMarker(fullContent);
+
+        const message = { role: 'assistant', content: cleanedContent };
+        if (finalToolCalls.length > 0) message.tool_calls = finalToolCalls;
+
+        res.json({
+          id,
+          object: 'chat.completion',
+          created,
+          model,
+          choices: [{
+            index: 0,
+            message,
+            finish_reason: finalToolCalls.length > 0 ? 'tool_calls' : 'stop'
+          }]
+        });
       }
+      // // 非流式响应处理 (保持原逻辑，也可以加上类似的递归逻辑，但通常流式才是痛点)
+      // const { content, toolCalls } = await generateAssistantResponseNoStream(requestBody, token);
+      
+      // // 简单处理：如果是文本且非工具调用，尝试移除 [done] 标记
+      // let finalContent = content;
+      // if (!toolCalls || toolCalls.length === 0) {
+      //   finalContent = removeDoneMarker(content);
+      // }
 
-      const message = { role: 'assistant', content: finalContent };
-      if (toolCalls.length > 0) message.tool_calls = toolCalls;
+      // const message = { role: 'assistant', content: finalContent };
+      // if (toolCalls.length > 0) message.tool_calls = toolCalls;
 
-      res.json({
-        id,
-        object: 'chat.completion',
-        created,
-        model,
-        choices: [{
-          index: 0,
-          message,
-          finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
-        }]
-      });
+      // res.json({
+      //   id,
+      //   object: 'chat.completion',
+      //   created,
+      //   model,
+      //   choices: [{
+      //     index: 0,
+      //     message,
+      //     finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
+      //   }]
+      // });
     }
   } catch (error) {
     logger.error('生成响应失败:', error.message);
