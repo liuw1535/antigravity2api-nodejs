@@ -123,10 +123,9 @@ class TokenManager {
   }
 
   set429(token) {
-    log.warn(`Token ...${token.access_token.slice(-8)} 因 429 被禁用一小时`)
+    log.warn(`Token ...${token.projectId.slice(-8)} 因 429 被禁用两分钟`)
     token.temp_forbidden = true;
-    token.forbidden_until = Date.now() + 3600000; // 禁用一小时
-    this.saveToFile();
+    token.forbidden_until = Date.now() + 1000 * 120; // 禁用两分钟
     this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
   }
 
@@ -142,7 +141,6 @@ class TokenManager {
     log.info('正在恢复因 429 被禁用的token...');
     token.temp_forbidden = false;
     token.forbidden_until = null;
-    this.saveToFile();
     this.initialize();
   }
 
