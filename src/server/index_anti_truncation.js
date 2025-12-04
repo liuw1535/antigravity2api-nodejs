@@ -349,7 +349,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
           // 续传时构建 Payload
           if (currentAttempt > 1) {
-            const newContents = [...originalContents];
+            const newContents = [...requestBody.request.contents];
             
             // 1. 添加目前为止生成的全部内容作为模型历史
             newContents.push({
@@ -358,9 +358,12 @@ app.post('/v1/chat/completions', async (req, res) => {
             });
 
             // 2. 添加续写提示
-            let contentSummary = fullContent.length > 200 
-              ? `...${fullContent.slice(-100)}` 
-              : fullContent;
+            let contentSummary = "";
+            if (fullContent.length > 200) {
+              contentSummary = `\n\n前面你已经输出了约 ${fullContent.length} 个字符的内容，结尾是：\n"...${fullContent.slice(-100)}"`
+            } else {
+              contentSummary = `\n\n前面你已经输出的内容是：\n"${fullContent}"`
+            }
             
             newContents.push({
               role: "user",
