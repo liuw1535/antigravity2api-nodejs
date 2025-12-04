@@ -6,6 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import log from '../src/utils/logger.js';
+import config from '../src/config/config.js';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +24,13 @@ const SCOPES = [
   'https://www.googleapis.com/auth/cclog',
   'https://www.googleapis.com/auth/experimentsandconfigs'
 ];
+
+const RESOURCE_MANAGER_API_URL = 'cloudresourcemanager.googleapis.com';
+const SERVICE_USAGE_API_URL = 'serviceusage.googleapis.com';
+const REQUIRE_SERVICES = [
+  "geminicloudassist.googleapis.com",  // Gemini Cloud Assist API
+  "cloudaicompanion.googleapis.com",  // Gemini for Google Cloud API
+]
 
 function generateAuthUrl(port) {
   const params = new URLSearchParams({
@@ -79,6 +88,149 @@ function exchangeCodeForToken(code, port) {
   });
 }
 
+async function refreshToken(account) {
+  log.info('正在刷新token...');
+  const body = new URLSearchParams({
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    grant_type: 'refresh_token',
+    refresh_token: account.refresh_token
+  });
+
+  try {
+    const response = await axios({
+      method: 'POST',
+      url: 'https://oauth2.googleapis.com/token',
+      headers: {
+        'Host': 'oauth2.googleapis.com',
+        'User-Agent': 'Go-http-client/1.1',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept-Encoding': 'gzip'
+      },
+      data: body.toString(),
+      timeout: config.timeout,
+      proxy: config.proxy ? (() => {
+        const proxyUrl = new URL(config.proxy);
+        return { protocol: proxyUrl.protocol.replace(':', ''), host: proxyUrl.hostname, port: parseInt(proxyUrl.port) };
+      })() : false
+    });
+
+    account.access_token = response.data.access_token;
+    account.expires_in = response.data.expires_in;
+    account.timestamp = Date.now();
+    return account;
+  } catch (error) {
+    throw { statusCode: error.response?.status, message: error.response?.data || error.message };
+  }
+}
+
+async function getProjects(account) {
+  const options = {
+    hostname: RESOURCE_MANAGER_API_URL,
+    path: '/v1/projects',
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${account.access_token}`,
+      'User-Agent': config.api.userAgent
+    }
+  };
+  
+  const response = await new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(JSON.parse(body));
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  }).catch(err => {
+    log.error('获取项目列表失败:', err.message);
+    return {};
+  });
+  if (!response.projects) return [];
+  log.info(`获取到api响应：${response}`);
+  const projects = response.projects || [];
+  const activeProjects = projects.filter(project => project.lifecycleState === 'ACTIVE');
+  log.info(`获取到项目列表：${activeProjects}`);
+  return activeProjects;
+}
+
+async function enableApiForProject(account, projectId, apiName) {
+  const headers = {
+    'Authorization': `Bearer ${account.access_token}`,
+    "Content-Type": "application/json",
+    'User-Agent': config.api.userAgent
+  };
+  const check_options = {
+    hostname: SERVICE_USAGE_API_URL,
+    path: `/v1/projects/${projectId}/services/${apiName}`,
+    method: 'GET',
+    headers
+  };
+  const response = await new Promise((resolve, reject) => {
+    const req = https.request(check_options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(JSON.parse(body));
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  }).catch(err => {
+    log.error('获取服务状态失败:', err.message);
+    return {};
+  });
+  if (response.state === 'ENABLED') {
+    log.info(`${apiName}已启用`);
+    return true;
+  }
+  log.info(`正在启用${apiName}...`);
+  const enable_options = {
+    hostname: SERVICE_USAGE_API_URL,
+    path: `/v1/projects/${projectId}/services/${apiName}:enable`,
+    method: 'POST',
+    headers
+  };
+  return new Promise((resolve, reject) => {
+    const req = https.request(enable_options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode in [200, 201]) {
+          resolve(true);
+        } else if (res.statusCode === 400) {
+          const error_data = JSON.parse(body);
+          if (error_data.error && error_data.error.message?.toLowerCase().includes('already enabled')) {
+            log.info(`${apiName}已启用`);
+            resolve(true);
+            return;
+          }
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+        }
+      })
+    })
+    req.on('error', reject);
+    req.end();
+  }).catch(err => {
+    log.error('启用服务失败:', err.message);
+    return {};
+  });
+
+}
+
+
 const server = http.createServer((req, res) => {
   const port = server.address().port;
   const url = new URL(req.url, `http://localhost:${port}`);
@@ -89,13 +241,33 @@ const server = http.createServer((req, res) => {
     
     if (code) {
       log.info('收到授权码，正在交换 Token...');
-      exchangeCodeForToken(code, port).then(tokenData => {
-        const account = {
+      exchangeCodeForToken(code, port).then(async tokenData => {
+        log.info('Token 交换成功，具体信息：', tokenData);
+        let account = {
           access_token: tokenData.access_token,
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
           timestamp: Date.now()
         };
+
+        // 接下来分为四步：刷新token -> 获取所有项目 -> 选择默认项目或者第一个项目 -> 开启对应api
+        account = await refreshToken(account);
+        log.info(`token刷新成功，新token为 ${account}`)
+        const projects = await getProjects(account);
+        if (projects.length === 0) {
+          log.warn('获取不到项目或没有可用的项目');
+          return;
+        }
+        const defaultProject = projects.find(project => project.projectId in config.projectIds) || projects[0];
+        log.info(`正在使用项目 ${defaultProject.projectId}`);
+        const res = REQUIRE_SERVICES.map(apiName => enableApiForProject(account, defaultProject.projectId, apiName));
+        // 所有项全过才行
+        const enable_res = await Promise.all(res).then(res => res.every(r => r));
+        if (!enable_res) {
+          log.warn('启用api服务失败');
+          return;
+        }
+        account.projectId = defaultProject.projectId;
         
         let accounts = [];
         try {

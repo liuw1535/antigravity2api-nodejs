@@ -57,6 +57,7 @@ const config = {
     host: process.env.API_HOST || 'daily-cloudcode-pa.sandbox.googleapis.com',
     userAgent: process.env.API_USER_AGENT || 'antigravity/1.11.3 windows/amd64'
   },
+  projectIds: process.env.PROJECT_IDs ? JSON.parse(process.env.PROJECT_IDs) : [],
   defaults: {
     temperature: parseFloat(process.env.DEFAULT_TEMPERATURE) || 1,
     top_p: parseFloat(process.env.DEFAULT_TOP_P) || 0.85,
