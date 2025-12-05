@@ -226,15 +226,22 @@ export async function getAvailableModels() {
       }
       data = await response.json();
     }
-    
-    return {
-      object: 'list',
-      data: Object.keys(data.models).map(id => ({
+    const modelList = Object.keys(data.models).map(id => ({
         id,
         object: 'model',
         created: Math.floor(Date.now() / 1000),
         owned_by: 'google'
-      }))
+      }));
+    modelList.push({
+      id: "claude-opus-4-5",
+      object: 'model',
+      created: Math.floor(Date.now() / 1000),
+      owned_by: 'google'
+    })
+    
+    return {
+      object: 'list',
+      data: modelList
     };
   } catch (error) {
     await handleApiError(error, token);

@@ -39,7 +39,7 @@ function extractImagesFromContent(content) {
 
   return result;
 }
-function handleUserMessage(extracted, antigravityMessages) {
+function handleUserMessage(extracted, antigravityMessages){
   antigravityMessages.push({
     role: "user",
     parts: [
@@ -50,11 +50,11 @@ function handleUserMessage(extracted, antigravityMessages) {
     ]
   })
 }
-function handleAssistantMessage(message, antigravityMessages) {
+function handleAssistantMessage(message, antigravityMessages){
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
   const hasContent = message.content && message.content.trim() !== '';
-
+  
   const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => ({
     functionCall: {
       id: toolCall.id,
@@ -64,21 +64,21 @@ function handleAssistantMessage(message, antigravityMessages) {
       }
     }
   })) : [];
-
-  if (lastMessage?.role === "model" && hasToolCalls && !hasContent) {
+  
+  if (lastMessage?.role === "model" && hasToolCalls && !hasContent){
     lastMessage.parts.push(...antigravityTools)
-  } else {
+  }else{
     const parts = [];
     if (hasContent) parts.push({ text: message.content });
     parts.push(...antigravityTools);
-
+    
     antigravityMessages.push({
       role: "model",
       parts
     })
   }
 }
-function handleToolCall(message, antigravityMessages) {
+function handleToolCall(message, antigravityMessages){
   // 从之前的 model 消息中找到对应的 functionCall name
   let functionName = '';
   for (let i = antigravityMessages.length - 1; i >= 0; i--) {
@@ -93,7 +93,7 @@ function handleToolCall(message, antigravityMessages) {
       if (functionName) break;
     }
   }
-
+  
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const functionResponse = {
     functionResponse: {
@@ -104,7 +104,7 @@ function handleToolCall(message, antigravityMessages) {
       }
     }
   };
-
+  
   // 如果上一条消息是 user 且包含 functionResponse，则合并
   if (lastMessage?.role === "user" && lastMessage.parts.some(p => p.functionResponse)) {
     lastMessage.parts.push(functionResponse);
@@ -115,7 +115,7 @@ function handleToolCall(message, antigravityMessages) {
     });
   }
 }
-function openaiMessageToAntigravity(openaiMessages) {
+function openaiMessageToAntigravity(openaiMessages){
   const antigravityMessages = [];
   for (const message of openaiMessages) {
     if (message.role === "user" || message.role === "system") {
@@ -127,10 +127,10 @@ function openaiMessageToAntigravity(openaiMessages) {
       handleToolCall(message, antigravityMessages);
     }
   }
-
+  
   return antigravityMessages;
 }
-function generateGenerationConfig(parameters, enableThinking, actualModelName) {
+function generateGenerationConfig(parameters, enableThinking, actualModelName){
   const generationConfig = {
     topP: parameters.top_p ?? config.defaults.top_p,
     topK: parameters.top_k ?? config.defaults.top_k,
@@ -149,14 +149,14 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName) {
       thinkingBudget: enableThinking ? 1024 : 0
     }
   }
-  if (enableThinking && actualModelName.includes("claude")) {
+  if (enableThinking && actualModelName.includes("claude")){
     delete generationConfig.topP;
   }
   return generationConfig
 }
-function convertOpenAIToolsToAntigravity(openaiTools) {
+function convertOpenAIToolsToAntigravity(openaiTools){
   if (!openaiTools || openaiTools.length === 0) return [];
-  return openaiTools.map((tool) => {
+  return openaiTools.map((tool)=>{
     delete tool.function.parameters.$schema;
     return {
       functionDeclarations: [
@@ -169,16 +169,32 @@ function convertOpenAIToolsToAntigravity(openaiTools) {
     }
   })
 }
-function generateRequestBody(openaiMessages, modelName, parameters, openaiTools, token) {
 
-  const enableThinking = modelName.endsWith('-thinking') ||
+function modelMapping(modelName){
+  if (modelName === "claude-sonnet-4-5-thinking"){
+    return "claude-sonnet-4-5";
+  } else if (modelName === "claude-opus-4-5"){
+    return "claude-opus-4-5-thinking";
+  } else if (modelName === "gemini-2.5-flash-thinking"){
+    return "gemini-2.5-flash";
+  }
+  return modelName;
+}
+
+function isEnableThinking(modelName){
+  return modelName.endsWith('-thinking') ||
     modelName === 'gemini-2.5-pro' ||
     modelName.startsWith('gemini-3-pro-') ||
     modelName === "rev19-uic3-1p" ||
     modelName === "gpt-oss-120b-medium"
-  const actualModelName = modelName.endsWith('-thinking') ? modelName.slice(0, -9) : modelName;
+}
 
-  return {
+function generateRequestBody(openaiMessages,modelName,parameters,openaiTools,token){
+  
+  const enableThinking = isEnableThinking(modelName);
+  const actualModelName = modelMapping(modelName);
+  
+  return{
     project: token.projectId,
     requestId: generateRequestId(),
     request: {
@@ -206,12 +222,12 @@ function changeRequestBodyToken(requestBody, token) {
   requestBody.request.sessionId = token.sessionId;
   return requestBody;
 }
-function getDefaultIp() {
+function getDefaultIp(){
   const interfaces = os.networkInterfaces();
-  if (interfaces.WLAN) {
-    for (const inter of interfaces.WLAN) {
-      if (inter.family === 'IPv4' && !inter.internal) {
-        return inter.address;
+  if (interfaces.WLAN){
+    for (const inter of interfaces.WLAN){
+      if (inter.family === 'IPv4' && !inter.internal){
+          return inter.address;
       }
     }
   } else if (interfaces.wlan2) {
@@ -223,7 +239,7 @@ function getDefaultIp() {
   }
   return '127.0.0.1';
 }
-export {
+export{
   generateRequestId,
   generateRequestBody,
   changeRequestBodyToken,
