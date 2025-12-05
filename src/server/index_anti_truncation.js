@@ -15,17 +15,10 @@ const app = express();
 const DONE_MARKER = "[done]";
 const MAX_CONTINUATION_ATTEMPTS = config.tokenReuse.retryMaxCount || 3;
 const CONTINUATION_PROMPT = `
-生成以下随机序列，保证本次输出与上次输出的非一致性：
-{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
-{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
-{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
-{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,b,c,d,e,sabduwa,f,g,h,i,j,k,l,m,n,o,p,q}}{{random::a,sahuwgduawyiav,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q}}
-{{roll 1d99999}}{{random::a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,shdia}}{{random::a,b,c,d,ss,shauhuwi,e,f,g,h,i,j,k,l,m,n,o,p,q}}
-序列结束。
 请从刚才被截断的地方继续输出剩余的所有内容。
 重要提醒：
 1. 不要重复前面已经输出的内容
-2. 直接继续输出，无需任何前言或解释
+2. 直接继续输出，无需任何前言、解释或者思考
 3. 当你完整完成所有内容输出后，必须在最后一行单独输出：${DONE_MARKER}
 4. ${DONE_MARKER} 标记表示你的回答已经完全结束，这是必需的结束标记
 现在请继续输出：`;
