@@ -251,23 +251,23 @@ const server = http.createServer((req, res) => {
         };
 
         // 接下来分为四步：刷新token -> 获取所有项目 -> 选择默认项目或者第一个项目 -> 开启对应api
-        account = await refreshToken(account);
-        log.info(`token刷新成功，新token为 ${account}`)
-        const projects = await getProjects(account);
-        if (projects.length === 0) {
-          log.warn('获取不到项目或没有可用的项目');
-          return;
-        }
-        const defaultProject = projects.find(project => project.projectId in config.projectIds) || projects[0];
-        log.info(`正在使用项目 ${defaultProject.projectId}`);
-        const res = REQUIRE_SERVICES.map(apiName => enableApiForProject(account, defaultProject.projectId, apiName));
-        // 所有项全过才行
-        const enable_res = await Promise.all(res).then(res => res.every(r => r));
-        if (!enable_res) {
-          log.warn('启用api服务失败');
-          return;
-        }
-        account.projectId = defaultProject.projectId;
+        // account = await refreshToken(account);
+        // log.info(`token刷新成功，新token为 ${account}`)
+        // const projects = await getProjects(account);
+        // if (projects.length === 0) {
+        //   log.warn('获取不到项目或没有可用的项目');
+        //   return;
+        // }
+        // const defaultProject = projects.find(project => project.projectId in config.projectIds) || projects[0];
+        // log.info(`正在使用项目 ${defaultProject.projectId}`);
+        // const res = REQUIRE_SERVICES.map(apiName => enableApiForProject(account, defaultProject.projectId, apiName));
+        // // 所有项全过才行
+        // const enable_res = await Promise.all(res).then(res => res.every(r => r));
+        // if (!enable_res) {
+        //   log.warn('启用api服务失败');
+        //   return;
+        // }
+        // account.projectId = defaultProject.projectId;
         
         let accounts = [];
         try {
