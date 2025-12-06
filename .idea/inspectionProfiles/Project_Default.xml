@@ -1,0 +1,46 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="fastapi" />
+          <option value="httpx" />
+          <option value="openai" />
+          <option value="pydantic" />
+          <option value="pydantic_settings" />
+          <option value="requests" />
+          <option value="starlette" />
+          <option value="uvicorn" />
+          <option value="google-genai" />
+          <option value="jinja2" />
+          <option value="python-multipart" />
+          <option value="cryptography" />
+          <option value="pymysql" />
+          <option value="sqlalchemy" />
+          <option value="aiomysql" />
+          <option value="aiosqlite" />
+          <option value="databases" />
+          <option value="python-dotenv" />
+          <option value="apscheduler" />
+          <option value="packaging" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8NamingInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="N802" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyShadowingNamesInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyStubPackagesAdvertiser" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="pandas-stubs==2.3.0.250703" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
