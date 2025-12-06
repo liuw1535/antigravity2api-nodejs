@@ -95,6 +95,17 @@ function convertToToolCall(functionCall) {
   };
 }
 
+// 转换 Gemini usageMetadata 为 OpenAI usage 格式
+function convertUsageMetadata(usageMetadata) {
+  if (!usageMetadata) return undefined;
+  
+  return {
+    prompt_tokens: usageMetadata.promptTokenCount || 0,
+    completion_tokens: usageMetadata.candidatesTokenCount || 0,
+    total_tokens: usageMetadata.totalTokenCount || 0
+  };
+}
+
 // 解析并发送流式响应片段（会修改 state 并触发 callback）
 function parseAndEmitStreamChunk(line, state, callback) {
   if (!line.startsWith('data: ')) return;
@@ -134,6 +145,11 @@ function parseAndEmitStreamChunk(line, state, callback) {
       }
       callback({ type: 'tool_calls', tool_calls: state.toolCalls });
       state.toolCalls = [];
+    }
+
+    // 处理 usageMetadata
+    if (data.response?.usageMetadata) {
+      callback({ type: 'usage', usage: convertUsageMetadata(data.response.usageMetadata) });
     }
   } catch (e) {
     // 忽略 JSON 解析错误
@@ -277,10 +293,10 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
   if (imageUrls.length > 0) {
     let markdown = content ? content + '\n\n' : '';
     markdown += imageUrls.map(url => `![image](${url})`).join('\n\n');
-    return { content: markdown, toolCalls };
+    return { content: markdown, toolCalls, usage: convertUsageMetadata(data.response?.usageMetadata) };
   }
   
-  return { content, toolCalls };
+  return { content, toolCalls, usage: convertUsageMetadata(data.response?.usageMetadata) };
 }
 
 export function closeRequester() {

@@ -102,7 +102,7 @@ app.get('/v1/models', async (req, res) => {
 
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { messages, model, stream = true, tools, ...params} = req.body;
+  const { messages, model, stream = true, tools, ...params } = req.body;
   try {
     if (!messages) {
       return res.status(400).json({ error: 'messages is required' });
@@ -114,44 +114,62 @@ app.post('/v1/chat/completions', async (req, res) => {
     const isImageModel = model.includes('-image');
     const requestBody = generateRequestBody(messages, model, params, tools, token);
     if (isImageModel) {
-      requestBody.request.generationConfig={
+      requestBody.request.generationConfig = {
         candidateCount: 1,
         // imageConfig:{
         //   aspectRatio: "1:1"
         // }
       }
-      requestBody.requestType="image_gen";
+      requestBody.requestType = "image_gen";
       requestBody.request.systemInstruction.parts[0].text += "现在你作为绘画模型聚焦于帮助用户生成图片";
       delete requestBody.request.tools;
       delete requestBody.request.toolConfig;
     }
     //console.log(JSON.stringify(requestBody,null,2))
-    
+
     const { id, created } = createResponseMeta();
-    
+
     if (stream) {
       setStreamHeaders(res);
-      
+
       if (isImageModel) {
         const { content } = await generateAssistantResponseNoStream(requestBody, token);
         writeStreamData(res, createStreamChunk(id, created, model, { content }));
         endStream(res, id, created, model, 'stop');
       } else {
         let hasToolCall = false;
+        let usageData = null;
         await generateAssistantResponse(requestBody, token, (data) => {
-          const delta = data.type === 'tool_calls' 
-            ? { tool_calls: data.tool_calls } 
+          if (data.type === 'usage') {
+            usageData = data.usage;
+            return;
+          }
+          const delta = data.type === 'tool_calls'
+            ? { tool_calls: data.tool_calls }
             : { content: data.content };
           if (data.type === 'tool_calls') hasToolCall = true;
           writeStreamData(res, createStreamChunk(id, created, model, delta));
         });
+
+        // 发送 usage 数据（如果有）
+        if (usageData) {
+          writeStreamData(res, {
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [],
+            usage: usageData
+          });
+        }
+
         endStream(res, id, created, model, hasToolCall ? 'tool_calls' : 'stop');
       }
     } else {
-      const { content, toolCalls } = await generateAssistantResponseNoStream(requestBody, token);
+      const { content, toolCalls, usage } = await generateAssistantResponseNoStream(requestBody, token);
       const message = { role: 'assistant', content };
       if (toolCalls.length > 0) message.tool_calls = toolCalls;
-      
+
       res.json({
         id,
         object: 'chat.completion',
@@ -161,7 +179,8 @@ app.post('/v1/chat/completions', async (req, res) => {
           index: 0,
           message,
           finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
-        }]
+        }],
+        usage
       });
     }
   } catch (error) {
@@ -169,7 +188,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (!res.headersSent) {
       const { id, created } = createResponseMeta();
       const errorContent = `错误: ${error.message}`;
-      
+
       if (stream) {
         setStreamHeaders(res);
         writeStreamData(res, createStreamChunk(id, created, model, { content: errorContent }));

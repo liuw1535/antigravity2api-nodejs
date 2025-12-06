@@ -2,7 +2,7 @@
 node_modules/
 
 # 账户信息
-# accounts.json
+ accounts.json
 
 # 日志
 *.log
