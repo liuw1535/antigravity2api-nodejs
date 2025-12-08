@@ -571,19 +571,29 @@ async function refreshQuotaData(refreshToken) {
     await loadQuotaData(refreshToken, true);
 }
 
-// 测试模型列表
-const testModels = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-pro',
-    'gemini-3-pro-low',
-    'gemini-3-pro-high',
-    'claude-sonnet-4-5',
-    'claude-sonnet-4-5-thinking',
-    'claude-opus-4-5-thinking'
-];
+// 缓存模型列表
+let cachedModels = null;
 
-function showTestModal(refreshToken) {
+async function fetchModels() {
+    if (cachedModels) return cachedModels;
+    try {
+        const response = await fetch('/admin/models', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+        if (data.success) {
+            cachedModels = data.data;
+            return cachedModels;
+        }
+    } catch (error) {
+        console.error('获取模型列表失败:', error);
+    }
+    // 返回默认列表作为后备
+    return ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-pro-low', 'gemini-3-pro-high'];
+}
+
+async function showTestModal(refreshToken) {
+    const models = await fetchModels();
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.id = 'testModal';
@@ -593,7 +603,7 @@ function showTestModal(refreshToken) {
             <div class="form-group">
                 <label>选择模型</label>
                 <select class="form-select" id="testModelSelect">
-                    ${testModels.map(m => `<option value="${m}">${m}</option>`).join('')}
+                    ${models.map(m => `<option value="${m}">${m}</option>`).join('')}
                 </select>
             </div>
             <div id="testResult" style="margin: 16px 0; padding: 12px; background: var(--bg); border-radius: 8px; min-height: 60px;"></div>

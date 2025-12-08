@@ -311,6 +311,22 @@ router.put('/config', authMiddleware, (req, res) => {
   }
 });
 
+// 获取可用模型列表
+router.get('/models', authMiddleware, async (req, res) => {
+  try {
+    const models = await getModelsWithQuotas(await (async () => {
+      const token = await tokenManager.getToken();
+      if (!token) throw new Error('没有可用的token');
+      return token;
+    })());
+    // 返回模型ID列表
+    res.json({ success: true, data: Object.keys(models) });
+  } catch (error) {
+    logger.error('获取模型列表失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // 获取指定Token的模型额度
 router.get('/tokens/:refreshToken/quotas', authMiddleware, async (req, res) => {
   try {
