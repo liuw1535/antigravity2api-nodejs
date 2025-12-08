@@ -101,13 +101,19 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
       });
     }
 
-    // 检查并刷新 token
-    if (tokenManager.isExpired(tokenData)) {
-      try {
+    // 强制刷新 token 以获取最新授权
+    try {
+      // 从内存中获取 token 对象进行刷新
+      const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
+      if (memToken) {
+        await tokenManager.refreshToken(memToken);
+        tokenData = memToken;
+      } else {
+        // 如果内存中没有，用文件数据刷新
         tokenData = await tokenManager.refreshToken(tokenData);
-      } catch (error) {
-        return res.json({ success: false, message: 'Token已过期且刷新失败: ' + (error.message || error) });
       }
+    } catch (error) {
+      return res.json({ success: false, message: 'Token刷新失败: ' + (error.message || error) });
     }
 
     // 发送测试请求
