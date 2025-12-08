@@ -239,6 +239,9 @@ class TokenManager {
       if (tokenData.projectId) {
         newToken.projectId = tokenData.projectId;
       }
+      if (tokenData.email) {
+        newToken.email = tokenData.email;
+      }
       
       allTokens.push(newToken);
       fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
@@ -307,7 +310,8 @@ class TokenManager {
         expires_in: token.expires_in,
         timestamp: token.timestamp,
         enable: token.enable !== false,
-        projectId: token.projectId || null
+        projectId: token.projectId || null,
+        email: token.email || null
       }));
     } catch (error) {
       log.error('获取Token列表失败:', error.message);

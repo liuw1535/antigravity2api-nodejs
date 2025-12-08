@@ -348,6 +348,10 @@ function renderTokens(tokens) {
                     <span class="info-value">${token.projectId || 'N/A'}</span>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">📧 邮箱</span>
+                    <span class="info-value">${token.email || 'N/A'}</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">⏰ 过期</span>
                     <span class="info-value">${new Date(token.timestamp + token.expires_in * 1000).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</span>
                 </div>

@@ -39,7 +39,7 @@ router.get('/tokens', authMiddleware, (req, res) => {
 });
 
 router.post('/tokens', authMiddleware, (req, res) => {
-  const { access_token, refresh_token, expires_in, timestamp, enable, projectId } = req.body;
+  const { access_token, refresh_token, expires_in, timestamp, enable, projectId, email } = req.body;
   if (!access_token || !refresh_token) {
     return res.status(400).json({ success: false, message: 'access_token和refresh_token必填' });
   }
@@ -47,6 +47,7 @@ router.post('/tokens', authMiddleware, (req, res) => {
   if (timestamp) tokenData.timestamp = timestamp;
   if (enable !== undefined) tokenData.enable = enable;
   if (projectId) tokenData.projectId = projectId;
+  if (email) tokenData.email = email;
   
   const result = tokenManager.addToken(tokenData);
   res.json(result);
@@ -109,6 +110,24 @@ router.post('/oauth/exchange', authMiddleware, async (req, res) => {
       timestamp: Date.now(),
       enable: true
     };
+    
+    try {
+      const emailResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: {
+          'Host': 'www.googleapis.com',
+          'User-Agent': 'Go-http-client/1.1',
+          'Authorization': `Bearer ${account.access_token}`,
+          'Accept-Encoding': 'gzip'
+        }
+      });
+      const userInfo = await emailResponse.json();
+      if (userInfo.email) {
+        account.email = userInfo.email;
+        logger.info('获取到用户邮箱: ' + userInfo.email);
+      }
+    } catch (err) {
+      logger.warn('获取用户邮箱失败:', err.message);
+    }
     
     if (config.skipProjectIdFetch) {
       account.projectId = generateProjectId();

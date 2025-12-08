@@ -71,6 +71,21 @@ async function exchangeCodeForToken(code, port) {
   return response.data;
 }
 
+async function fetchUserEmail(accessToken) {
+  const response = await axios({
+    method: 'GET',
+    url: 'https://www.googleapis.com/oauth2/v2/userinfo',
+    headers: {
+      'Host': 'www.googleapis.com',
+      'User-Agent': 'Go-http-client/1.1',
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept-Encoding': 'gzip'
+    },
+    ...getAxiosConfig()
+  });
+  return response.data?.email;
+}
+
 async function fetchProjectId(accessToken) {
   const response = await axios({
     method: 'POST',
@@ -105,6 +120,16 @@ const server = http.createServer((req, res) => {
           expires_in: tokenData.expires_in,
           timestamp: Date.now()
         };
+        
+        try {
+          const email = await fetchUserEmail(account.access_token);
+          if (email) {
+            account.email = email;
+            log.info('获取到用户邮箱: ' + email);
+          }
+        } catch (err) {
+          log.warn('获取用户邮箱失败:', err.message);
+        }
         
         if (config.skipProjectIdFetch) {
           account.projectId = generateProjectId();
