@@ -232,7 +232,7 @@ class TokenManager {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_in: tokenData.expires_in || 3599,
-        timestamp: tokenData.timestamp || Date.now(),
+        timestamp: tokenData.timestamp || 0,  // 默认 0，强制首次使用时刷新
         enable: tokenData.enable !== undefined ? tokenData.enable : true
       };
       
