@@ -6,6 +6,7 @@ import { log } from '../utils/logger.js';
 import { generateSessionId, generateProjectId } from '../utils/idGenerator.js';
 import config from '../config/config.js';
 import { OAUTH_CONFIG } from '../constants/oauth.js';
+import redisClient from '../utils/redisClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +16,7 @@ class TokenManager {
     this.filePath = filePath;
     this.tokens = [];
     this.currentIndex = 0;
-    // 存储 429 限流标记 { "refreshToken:model" -> { time, retryAfter, model } }
+    // 内存存储 429 限流标记（Redis 不可用时的后备）
     this.rateLimitedTokens = new Map();
     this.ensureFileExists();
     this.initialize();
@@ -167,7 +168,7 @@ class TokenManager {
       const token = this.tokens[this.currentIndex];
 
       // 跳过被限流的渠道（检查特定模型的限流）
-      if (model && this.isRateLimited(token, model)) {
+      if (model && await this.isRateLimited(token, model)) {
         log.info(`跳过被限流的渠道 ...${token.access_token?.slice(-8)} (模型: ${model})`);
         this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
         continue;
@@ -230,20 +231,42 @@ class TokenManager {
   }
 
   // 标记 token+model 为 429 限流状态
-  markRateLimited(token, retryAfterSeconds = 60, model = null) {
+  async markRateLimited(token, retryAfterSeconds = 60, model = null) {
     const key = this._getRateLimitKey(token.refresh_token, model);
+    const data = { model, time: Date.now() };
+
+    // 优先使用 Redis
+    if (redisClient.available()) {
+      await redisClient.setRateLimit(key, data, retryAfterSeconds);
+    }
+
+    // 同时写入内存（作为后备和快速查询）
     this.rateLimitedTokens.set(key, {
       time: Date.now(),
       retryAfter: retryAfterSeconds * 1000,
       model: model
     });
+
     const modelInfo = model ? ` 模型 ${model}` : '';
     log.warn(`Token ...${token.access_token?.slice(-8)}${modelInfo} 被标记为 429 限流，${retryAfterSeconds}秒后可重试`);
   }
 
   // 检查 token+model 是否处于 429 限流状态
-  isRateLimited(token, model = null) {
+  async isRateLimited(token, model = null) {
     const key = this._getRateLimitKey(token.refresh_token, model);
+
+    // 优先从 Redis 查询
+    if (redisClient.available()) {
+      const redisInfo = await redisClient.getRateLimit(key);
+      if (redisInfo && redisInfo.ttl > 0) {
+        return true;
+      }
+      // Redis 中不存在或已过期，清除内存缓存
+      this.rateLimitedTokens.delete(key);
+      return false;
+    }
+
+    // Redis 不可用时使用内存
     const info = this.rateLimitedTokens.get(key);
     if (!info) return false;
 
@@ -256,13 +279,25 @@ class TokenManager {
   }
 
   // 清除 token 的 429 限流标记（可指定模型，不指定则清除该 token 所有模型的限流）
-  clearRateLimit(token, model = null) {
+  async clearRateLimit(token, model = null) {
     if (model) {
       const key = this._getRateLimitKey(token.refresh_token, model);
+      // 清除 Redis
+      if (redisClient.available()) {
+        await redisClient.deleteRateLimit(key);
+      }
+      // 清除内存
       this.rateLimitedTokens.delete(key);
     } else {
       // 清除该 token 所有模型的限流
       const prefix = token.refresh_token;
+
+      // 清除 Redis
+      if (redisClient.available()) {
+        await redisClient.deleteRateLimitsByPattern(prefix);
+      }
+
+      // 清除内存
       for (const key of this.rateLimitedTokens.keys()) {
         if (key === prefix || key.startsWith(prefix + ':')) {
           this.rateLimitedTokens.delete(key);
@@ -272,8 +307,24 @@ class TokenManager {
   }
 
   // 获取 token+model 的 429 状态信息
-  getRateLimitInfo(refreshToken, model = null) {
+  async getRateLimitInfo(refreshToken, model = null) {
     const key = this._getRateLimitKey(refreshToken, model);
+
+    // 优先从 Redis 查询
+    if (redisClient.available()) {
+      const redisInfo = await redisClient.getRateLimit(key);
+      if (redisInfo && redisInfo.ttl > 0) {
+        return {
+          isLimited: true,
+          remainingMs: redisInfo.ttl * 1000,
+          remainingSeconds: redisInfo.ttl,
+          model: redisInfo.model
+        };
+      }
+      return null;
+    }
+
+    // Redis 不可用时使用内存
     const info = this.rateLimitedTokens.get(key);
     if (!info) return null;
 
@@ -288,7 +339,16 @@ class TokenManager {
   }
 
   // 获取 token 所有被限流的模型列表
-  getRateLimitedModels(refreshToken) {
+  async getRateLimitedModels(refreshToken) {
+    // 优先从 Redis 查询
+    if (redisClient.available()) {
+      const redisModels = await redisClient.getRateLimitedModels(refreshToken);
+      if (redisModels !== null) {
+        return redisModels;
+      }
+    }
+
+    // Redis 不可用时使用内存
     const models = [];
     const prefix = refreshToken + ':';
     const now = Date.now();
@@ -390,15 +450,16 @@ class TokenManager {
     }
   }
 
-  getTokenList() {
+  async getTokenList() {
     try {
       this.ensureFileExists();
       const data = fs.readFileSync(this.filePath, 'utf8');
       const allTokens = JSON.parse(data);
-      
-      return allTokens.map(token => {
-        const rateLimitedModels = this.getRateLimitedModels(token.refresh_token);
-        return {
+
+      const result = [];
+      for (const token of allTokens) {
+        const rateLimitedModels = await this.getRateLimitedModels(token.refresh_token);
+        result.push({
           refresh_token: token.refresh_token,
           access_token: token.access_token,
           access_token_suffix: token.access_token ? `...${token.access_token.slice(-8)}` : 'N/A',
@@ -409,8 +470,9 @@ class TokenManager {
           email: token.email || null,
           rateLimitedModels: rateLimitedModels,
           rateLimitedCount: rateLimitedModels.length
-        };
-      });
+        });
+      }
+      return result;
     } catch (error) {
       log.error('获取Token列表失败:', error.message);
       return [];

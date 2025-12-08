@@ -61,7 +61,11 @@ const config = {
   proxy: process.env.PROXY || null,
   systemInstruction: process.env.SYSTEM_INSTRUCTION || '',
   skipProjectIdFetch: jsonConfig.other?.skipProjectIdFetch === true,
-  imageOutputFormat: jsonConfig.other?.imageOutputFormat || 'url'  // 'url' 或 'base64'
+  imageOutputFormat: jsonConfig.other?.imageOutputFormat || 'url',  // 'url' 或 'base64'
+  redis: {
+    url: process.env.REDIS_URL || jsonConfig.redis?.url || null,
+    keyPrefix: jsonConfig.redis?.keyPrefix || 'ag2api:'
+  }
 };
 
 log.info('✓ 配置加载成功');

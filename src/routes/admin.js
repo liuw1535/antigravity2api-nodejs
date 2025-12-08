@@ -33,8 +33,8 @@ router.post('/login', (req, res) => {
 });
 
 // Token管理API - 需要JWT认证
-router.get('/tokens', authMiddleware, (req, res) => {
-  const tokens = tokenManager.getTokenList();
+router.get('/tokens', authMiddleware, async (req, res) => {
+  const tokens = await tokenManager.getTokenList();
   res.json({ success: true, data: tokens });
 });
 
@@ -82,7 +82,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
   const { model = 'gemini-2.5-flash' } = req.body;
 
   try {
-    const tokens = tokenManager.getTokenList();
+    const tokens = await tokenManager.getTokenList();
     let tokenData = tokens.find(t => t.refresh_token === refreshToken);
 
     if (!tokenData) {
@@ -90,7 +90,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
     }
 
     // 检查该模型是否被限流
-    const rateLimitInfo = tokenManager.getRateLimitInfo(refreshToken, model);
+    const rateLimitInfo = await tokenManager.getRateLimitInfo(refreshToken, model);
     if (rateLimitInfo?.isLimited) {
       return res.json({
         success: false,
@@ -141,7 +141,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
     // 测试成功，清除该模型的限流标记
     const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
     if (memToken) {
-      tokenManager.clearRateLimit(memToken, model);
+      await tokenManager.clearRateLimit(memToken, model);
     }
 
     res.json({
@@ -164,7 +164,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
     if (status === 429 || errorMessage.includes('RESOURCE_EXHAUSTED')) {
       const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
       if (memToken) {
-        tokenManager.markRateLimited(memToken, 60, model);
+        await tokenManager.markRateLimited(memToken, 60, model);
       }
       return res.json({
         success: false,
@@ -182,7 +182,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
 });
 
 // 清除指定渠道的限流标记（可选指定模型）
-router.post('/tokens/:refreshToken/clear-ratelimit', authMiddleware, (req, res) => {
+router.post('/tokens/:refreshToken/clear-ratelimit', authMiddleware, async (req, res) => {
   const { refreshToken } = req.params;
   const { model } = req.body;  // 可选：指定清除某个模型的限流
   const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
@@ -191,7 +191,7 @@ router.post('/tokens/:refreshToken/clear-ratelimit', authMiddleware, (req, res) 
     return res.status(404).json({ success: false, message: 'Token不存在或未启用' });
   }
 
-  tokenManager.clearRateLimit(memToken, model);
+  await tokenManager.clearRateLimit(memToken, model);
   const modelInfo = model ? ` (模型: ${model})` : ' (所有模型)';
   res.json({ success: true, message: `已清除限流标记${modelInfo}` });
 });
@@ -332,7 +332,7 @@ router.get('/tokens/:refreshToken/quotas', authMiddleware, async (req, res) => {
   try {
     const { refreshToken } = req.params;
     const forceRefresh = req.query.refresh === 'true';
-    const tokens = tokenManager.getTokenList();
+    const tokens = await tokenManager.getTokenList();
     let tokenData = tokens.find(t => t.refresh_token === refreshToken);
     
     if (!tokenData) {
