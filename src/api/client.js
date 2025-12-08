@@ -58,11 +58,29 @@ function buildRequesterConfig(headers, body = null) {
   return reqConfig;
 }
 
+// 从错误响应中提取 retry-after 时间（秒）
+function extractRetryAfter(error, errorBody) {
+  // 优先从响应头获取
+  const retryAfterHeader = error.response?.headers?.['retry-after'];
+  if (retryAfterHeader) {
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds)) return seconds;
+  }
+
+  // 从错误信息中提取 "retry in Xs" 或 "retryDelay": "Xs"
+  const match = errorBody?.match(/retry\s*(?:in|after|Delay["']?\s*:\s*["']?)\s*(\d+(?:\.\d+)?)\s*s/i);
+  if (match) {
+    return Math.ceil(parseFloat(match[1]));
+  }
+
+  return 60;  // 默认 60 秒
+}
+
 // 统一错误处理
-async function handleApiError(error, token) {
+async function handleApiError(error, token, model = null) {
   const status = error.response?.status || error.status || 'Unknown';
   let errorBody = error.message;
-  
+
   if (error.response?.data?.readable) {
     const chunks = [];
     for await (const chunk of error.response.data) {
@@ -74,12 +92,20 @@ async function handleApiError(error, token) {
   } else if (error.response?.data) {
     errorBody = error.response.data;
   }
-  
+
+  // 处理 429 限流错误（针对特定模型）
+  if (status === 429 || errorBody?.includes('RESOURCE_EXHAUSTED')) {
+    const retryAfter = extractRetryAfter(error, errorBody);
+    tokenManager.markRateLimited(token, retryAfter, model);
+    const modelInfo = model ? ` (模型: ${model})` : '';
+    throw new Error(`请求过于频繁 (429)，该渠道${modelInfo}已被限流 ${retryAfter} 秒。错误详情: ${errorBody}`);
+  }
+
   if (status === 403) {
     tokenManager.disableCurrentToken(token);
     throw new Error(`该账号没有使用权限，已自动禁用。错误详情: ${errorBody}`);
   }
-  
+
   throw new Error(`API请求失败 (${status}): ${errorBody}`);
 }
 
@@ -181,7 +207,7 @@ export async function generateAssistantResponse(requestBody, token, callback) {
         response.data.on('error', reject);
       });
     } catch (error) {
-      await handleApiError(error, token);
+      await handleApiError(error, token, requestBody?.model);
     }
   } else {
     try {
@@ -197,7 +223,7 @@ export async function generateAssistantResponse(requestBody, token, callback) {
           .onError(reject);
       });
     } catch (error) {
-      await handleApiError(error, token);
+      await handleApiError(error, token, requestBody?.model);
     }
   }
 }
@@ -292,7 +318,7 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
       data = await response.json();
     }
   } catch (error) {
-    await handleApiError(error, token);
+    await handleApiError(error, token, requestBody?.model);
   }
   //console.log(JSON.stringify(data));
   // 解析响应内容

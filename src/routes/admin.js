@@ -76,6 +76,126 @@ router.post('/tokens/reload', authMiddleware, async (req, res) => {
   }
 });
 
+// 测试指定渠道是否可用
+router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
+  const { refreshToken } = req.params;
+  const { model = 'gemini-2.5-flash' } = req.body;
+
+  try {
+    const tokens = tokenManager.getTokenList();
+    let tokenData = tokens.find(t => t.refresh_token === refreshToken);
+
+    if (!tokenData) {
+      return res.status(404).json({ success: false, message: 'Token不存在' });
+    }
+
+    // 检查该模型是否被限流
+    const rateLimitInfo = tokenManager.getRateLimitInfo(refreshToken, model);
+    if (rateLimitInfo?.isLimited) {
+      return res.json({
+        success: false,
+        message: `模型 ${model} 处于限流状态，还需等待 ${rateLimitInfo.remainingSeconds} 秒`,
+        rateLimited: true,
+        remainingSeconds: rateLimitInfo.remainingSeconds,
+        model
+      });
+    }
+
+    // 检查并刷新 token
+    if (tokenManager.isExpired(tokenData)) {
+      try {
+        tokenData = await tokenManager.refreshToken(tokenData);
+      } catch (error) {
+        return res.json({ success: false, message: 'Token已过期且刷新失败: ' + (error.message || error) });
+      }
+    }
+
+    // 发送测试请求
+    const testPayload = {
+      project: tokenData.projectId || 'test-project',
+      model,
+      request: {
+        contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+        generationConfig: { maxOutputTokens: 10 }
+      }
+    };
+
+    const axios = (await import('axios')).default;
+    const response = await axios({
+      method: 'POST',
+      url: config.api.noStreamUrl,
+      headers: {
+        'Host': config.api.host,
+        'User-Agent': config.api.userAgent,
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      data: testPayload,
+      timeout: 30000,
+      proxy: config.proxy ? (() => {
+        const proxyUrl = new URL(config.proxy);
+        return { protocol: proxyUrl.protocol.replace(':', ''), host: proxyUrl.hostname, port: parseInt(proxyUrl.port) };
+      })() : false
+    });
+
+    // 测试成功，清除该模型的限流标记
+    const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
+    if (memToken) {
+      tokenManager.clearRateLimit(memToken, model);
+    }
+
+    res.json({
+      success: true,
+      message: '渠道测试成功',
+      model,
+      response: response.data?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '(无响应内容)'
+    });
+  } catch (error) {
+    const status = error.response?.status;
+    let errorMessage = error.message;
+
+    if (error.response?.data) {
+      errorMessage = typeof error.response.data === 'string'
+        ? error.response.data
+        : JSON.stringify(error.response.data);
+    }
+
+    // 检测 429 错误
+    if (status === 429 || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
+      if (memToken) {
+        tokenManager.markRateLimited(memToken, 60, model);
+      }
+      return res.json({
+        success: false,
+        message: `渠道模型 ${model} 被限流 (429): ${errorMessage}`,
+        rateLimited: true,
+        model
+      });
+    }
+
+    res.json({
+      success: false,
+      message: `测试失败 (${status || 'Unknown'}): ${errorMessage}`
+    });
+  }
+});
+
+// 清除指定渠道的限流标记（可选指定模型）
+router.post('/tokens/:refreshToken/clear-ratelimit', authMiddleware, (req, res) => {
+  const { refreshToken } = req.params;
+  const { model } = req.body;  // 可选：指定清除某个模型的限流
+  const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
+
+  if (!memToken) {
+    return res.status(404).json({ success: false, message: 'Token不存在或未启用' });
+  }
+
+  tokenManager.clearRateLimit(memToken, model);
+  const modelInfo = model ? ` (模型: ${model})` : ' (所有模型)';
+  res.json({ success: true, message: `已清除限流标记${modelInfo}` });
+});
+
 router.post('/oauth/exchange', authMiddleware, async (req, res) => {
   const { code, port } = req.body;
   if (!code || !port) {

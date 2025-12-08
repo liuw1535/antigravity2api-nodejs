@@ -184,3 +184,13 @@ button.loading::after { content: ''; position: absolute; width: 16px; height: 16
 @media (max-width: 768px) {
     .token-actions { grid-template-columns: 1fr; }
 }
+
+/* 429 限流样式 */
+.token-card.rate-limited { border: 2px solid var(--warning); background: rgba(245, 158, 11, 0.05); }
+.rate-limit-badge { background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+.rate-limit-models { background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 6px; margin-top: 8px; }
+.rate-limit-models .info-value { color: var(--warning); font-size: 0.85rem; word-break: break-word; }
+.form-select { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem; background: var(--card); color: var(--text); cursor: pointer; }
+.form-select:focus { outline: none; border-color: var(--primary); }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text); }

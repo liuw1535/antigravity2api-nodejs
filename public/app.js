@@ -331,11 +331,12 @@ function renderTokens(tokens) {
     }
     
     tokenList.innerHTML = tokens.map(token => `
-        <div class="token-card">
+        <div class="token-card ${token.rateLimitedCount > 0 ? 'rate-limited' : ''}">
             <div class="token-header">
                 <span class="status ${token.enable ? 'enabled' : 'disabled'}">
                     ${token.enable ? '✅ 启用' : '❌ 禁用'}
                 </span>
+                ${token.rateLimitedCount > 0 ? `<span class="status rate-limit-badge">⚠️ ${token.rateLimitedCount}个模型限流</span>` : ''}
                 <span class="token-id">#${token.refresh_token.substring(0, 8)}</span>
             </div>
             <div class="token-info">
@@ -355,9 +356,17 @@ function renderTokens(tokens) {
                     <span class="info-label">⏰ 过期</span>
                     <span class="info-value">${new Date(token.timestamp + token.expires_in * 1000).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</span>
                 </div>
+                ${token.rateLimitedCount > 0 ? `
+                <div class="info-row rate-limit-models">
+                    <span class="info-label">⚠️ 限流模型</span>
+                    <span class="info-value">${token.rateLimitedModels.map(m => m.model + '(' + m.remainingSeconds + 's)').join(', ')}</span>
+                </div>
+                ` : ''}
             </div>
             <div class="token-actions">
                 <button class="btn btn-info" onclick="showQuotaModal('${token.refresh_token}')">📊 查看额度</button>
+                <button class="btn btn-primary" onclick="showTestModal('${token.refresh_token}')">🧪 测试</button>
+                ${token.rateLimitedCount > 0 ? `<button class="btn btn-secondary" onclick="clearRateLimit('${token.refresh_token}')">🔓 解除限流</button>` : ''}
                 <button class="btn ${token.enable ? 'btn-warning' : 'btn-success'}" onclick="toggleToken('${token.refresh_token}', ${!token.enable})">
                     ${token.enable ? '⏸️ 禁用' : '▶️ 启用'}
                 </button>
@@ -560,6 +569,127 @@ async function loadQuotaData(refreshToken, forceRefresh = false) {
 
 async function refreshQuotaData(refreshToken) {
     await loadQuotaData(refreshToken, true);
+}
+
+// 测试模型列表
+const testModels = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-pro',
+    'gemini-3-pro-low',
+    'gemini-3-pro-high',
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-5-thinking',
+    'claude-opus-4-5-thinking'
+];
+
+function showTestModal(refreshToken) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'testModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-title">🧪 测试渠道</div>
+            <div class="form-group">
+                <label>选择模型</label>
+                <select class="form-select" id="testModelSelect">
+                    ${testModels.map(m => `<option value="${m}">${m}</option>`).join('')}
+                </select>
+            </div>
+            <div id="testResult" style="margin: 16px 0; padding: 12px; background: var(--bg); border-radius: 8px; min-height: 60px;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeTestModal()">关闭</button>
+                <button class="btn btn-primary" id="runTestBtn" onclick="runChannelTest('${refreshToken}')">🚀 开始测试</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function closeTestModal() {
+    const modal = document.getElementById('testModal');
+    if (modal) modal.remove();
+}
+
+async function runChannelTest(refreshToken) {
+    const model = document.getElementById('testModelSelect').value;
+    const resultContent = document.getElementById('testResult');
+    const runBtn = document.getElementById('runTestBtn');
+
+    runBtn.disabled = true;
+    runBtn.textContent = '测试中...';
+    resultContent.innerHTML = '<div style="color: var(--text-light);">正在测试...</div>';
+
+    try {
+        const response = await fetch(`/admin/tokens/${encodeURIComponent(refreshToken)}/test`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ model })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            resultContent.innerHTML = `
+                <div style="color: #10b981; font-weight: bold;">✅ 测试成功</div>
+                <div style="margin-top: 8px; font-size: 0.9em;">
+                    <div><strong>模型：</strong>${data.model}</div>
+                    <div><strong>响应：</strong>${data.response}</div>
+                </div>
+            `;
+            loadTokens();
+        } else {
+            resultContent.innerHTML = `
+                <div style="color: #ef4444; font-weight: bold;">❌ 测试失败</div>
+                <div style="margin-top: 8px; font-size: 0.9em; word-break: break-all;">
+                    ${data.rateLimited ? `<div style="color: #f59e0b;">⚠️ 模型 ${data.model || ''} 已被标记为限流</div>` : ''}
+                    <div>${data.message}</div>
+                </div>
+            `;
+            if (data.rateLimited) {
+                loadTokens();
+            }
+        }
+    } catch (error) {
+        resultContent.innerHTML = `
+            <div style="color: #ef4444; font-weight: bold;">❌ 请求失败</div>
+            <div style="margin-top: 8px;">${error.message}</div>
+        `;
+    } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '🚀 开始测试';
+    }
+}
+
+async function clearRateLimit(refreshToken) {
+    const confirmed = await showConfirm('确定要清除该渠道所有模型的限流标记吗？', '清除限流');
+    if (!confirmed) return;
+
+    showLoading('正在清除限流标记...');
+    try {
+        const response = await fetch(`/admin/tokens/${encodeURIComponent(refreshToken)}/clear-ratelimit`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        hideLoading();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadTokens();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        hideLoading();
+        showToast('清除限流失败: ' + error.message, 'error');
+    }
 }
 
 async function loadConfig() {

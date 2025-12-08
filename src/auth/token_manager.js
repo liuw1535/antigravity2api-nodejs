@@ -15,6 +15,8 @@ class TokenManager {
     this.filePath = filePath;
     this.tokens = [];
     this.currentIndex = 0;
+    // 存储 429 限流标记 { "refreshToken:model" -> { time, retryAfter, model } }
+    this.rateLimitedTokens = new Map();
     this.ensureFileExists();
     this.initialize();
   }
@@ -156,15 +158,21 @@ class TokenManager {
     this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
   }
 
-  async getToken() {
+  async getToken(model = null) {
     if (this.tokens.length === 0) return null;
 
-    //const startIndex = this.currentIndex;
     const totalTokens = this.tokens.length;
 
     for (let i = 0; i < totalTokens; i++) {
       const token = this.tokens[this.currentIndex];
-      
+
+      // 跳过被限流的渠道（检查特定模型的限流）
+      if (model && this.isRateLimited(token, model)) {
+        log.info(`跳过被限流的渠道 ...${token.access_token?.slice(-8)} (模型: ${model})`);
+        this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+        continue;
+      }
+
       try {
         if (this.isExpired(token)) {
           await this.refreshToken(token);
@@ -214,6 +222,91 @@ class TokenManager {
     if (found) {
       this.disableToken(found);
     }
+  }
+
+  // 生成限流 key
+  _getRateLimitKey(refreshToken, model) {
+    return model ? `${refreshToken}:${model}` : refreshToken;
+  }
+
+  // 标记 token+model 为 429 限流状态
+  markRateLimited(token, retryAfterSeconds = 60, model = null) {
+    const key = this._getRateLimitKey(token.refresh_token, model);
+    this.rateLimitedTokens.set(key, {
+      time: Date.now(),
+      retryAfter: retryAfterSeconds * 1000,
+      model: model
+    });
+    const modelInfo = model ? ` 模型 ${model}` : '';
+    log.warn(`Token ...${token.access_token?.slice(-8)}${modelInfo} 被标记为 429 限流，${retryAfterSeconds}秒后可重试`);
+  }
+
+  // 检查 token+model 是否处于 429 限流状态
+  isRateLimited(token, model = null) {
+    const key = this._getRateLimitKey(token.refresh_token, model);
+    const info = this.rateLimitedTokens.get(key);
+    if (!info) return false;
+
+    const elapsed = Date.now() - info.time;
+    if (elapsed >= info.retryAfter) {
+      this.rateLimitedTokens.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  // 清除 token 的 429 限流标记（可指定模型，不指定则清除该 token 所有模型的限流）
+  clearRateLimit(token, model = null) {
+    if (model) {
+      const key = this._getRateLimitKey(token.refresh_token, model);
+      this.rateLimitedTokens.delete(key);
+    } else {
+      // 清除该 token 所有模型的限流
+      const prefix = token.refresh_token;
+      for (const key of this.rateLimitedTokens.keys()) {
+        if (key === prefix || key.startsWith(prefix + ':')) {
+          this.rateLimitedTokens.delete(key);
+        }
+      }
+    }
+  }
+
+  // 获取 token+model 的 429 状态信息
+  getRateLimitInfo(refreshToken, model = null) {
+    const key = this._getRateLimitKey(refreshToken, model);
+    const info = this.rateLimitedTokens.get(key);
+    if (!info) return null;
+
+    const elapsed = Date.now() - info.time;
+    const remaining = Math.max(0, info.retryAfter - elapsed);
+    return {
+      isLimited: remaining > 0,
+      remainingMs: remaining,
+      remainingSeconds: Math.ceil(remaining / 1000),
+      model: info.model
+    };
+  }
+
+  // 获取 token 所有被限流的模型列表
+  getRateLimitedModels(refreshToken) {
+    const models = [];
+    const prefix = refreshToken + ':';
+    const now = Date.now();
+
+    for (const [key, info] of this.rateLimitedTokens.entries()) {
+      if (key.startsWith(prefix)) {
+        const elapsed = now - info.time;
+        if (elapsed < info.retryAfter) {
+          models.push({
+            model: info.model,
+            remainingSeconds: Math.ceil((info.retryAfter - elapsed) / 1000)
+          });
+        } else {
+          this.rateLimitedTokens.delete(key);
+        }
+      }
+    }
+    return models;
   }
 
   // API管理方法
@@ -303,16 +396,21 @@ class TokenManager {
       const data = fs.readFileSync(this.filePath, 'utf8');
       const allTokens = JSON.parse(data);
       
-      return allTokens.map(token => ({
-        refresh_token: token.refresh_token,
-        access_token: token.access_token,
-        access_token_suffix: token.access_token ? `...${token.access_token.slice(-8)}` : 'N/A',
-        expires_in: token.expires_in,
-        timestamp: token.timestamp,
-        enable: token.enable !== false,
-        projectId: token.projectId || null,
-        email: token.email || null
-      }));
+      return allTokens.map(token => {
+        const rateLimitedModels = this.getRateLimitedModels(token.refresh_token);
+        return {
+          refresh_token: token.refresh_token,
+          access_token: token.access_token,
+          access_token_suffix: token.access_token ? `...${token.access_token.slice(-8)}` : 'N/A',
+          expires_in: token.expires_in,
+          timestamp: token.timestamp,
+          enable: token.enable !== false,
+          projectId: token.projectId || null,
+          email: token.email || null,
+          rateLimitedModels: rateLimitedModels,
+          rateLimitedCount: rateLimitedModels.length
+        };
+      });
     } catch (error) {
       log.error('获取Token列表失败:', error.message);
       return [];
