@@ -310,9 +310,15 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
     } else if (part.functionCall) {
       toolCalls.push(convertToToolCall(part.functionCall));
     } else if (part.inlineData) {
-      // 保存图片到本地并获取 URL
-      const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
-      imageUrls.push(imageUrl);
+      if (config.imageOutputFormat === 'base64') {
+        // 返回 base64 data URI
+        const dataUri = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        imageUrls.push(dataUri);
+      } else {
+        // 保存图片到本地并获取 URL
+        const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
+        imageUrls.push(imageUrl);
+      }
     }
   }
   

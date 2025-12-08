@@ -60,7 +60,8 @@ const config = {
   timeout: jsonConfig.other?.timeout || 180000,
   proxy: process.env.PROXY || null,
   systemInstruction: process.env.SYSTEM_INSTRUCTION || '',
-  skipProjectIdFetch: jsonConfig.other?.skipProjectIdFetch === true
+  skipProjectIdFetch: jsonConfig.other?.skipProjectIdFetch === true,
+  imageOutputFormat: jsonConfig.other?.imageOutputFormat || 'url'  // 'url' 或 'base64'
 };
 
 log.info('✓ 配置加载成功');
