@@ -73,7 +73,7 @@ function extractRetryAfter(error, errorBody) {
     return Math.ceil(parseFloat(match[1]));
   }
 
-  return 60;  // 默认 60 秒
+  return 18000;  // 默认 5 小时
 }
 
 // 统一错误处理

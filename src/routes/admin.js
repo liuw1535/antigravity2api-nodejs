@@ -164,7 +164,7 @@ router.post('/tokens/:refreshToken/test', authMiddleware, async (req, res) => {
     if (status === 429 || errorMessage.includes('RESOURCE_EXHAUSTED')) {
       const memToken = tokenManager.tokens.find(t => t.refresh_token === refreshToken);
       if (memToken) {
-        await tokenManager.markRateLimited(memToken, 60, model);
+        await tokenManager.markRateLimited(memToken, 18000, model);  // 5小时
       }
       return res.json({
         success: false,

@@ -231,7 +231,7 @@ class TokenManager {
   }
 
   // 标记 token+model 为 429 限流状态
-  async markRateLimited(token, retryAfterSeconds = 60, model = null) {
+  async markRateLimited(token, retryAfterSeconds = 18000, model = null) {  // 默认5小时
     const key = this._getRateLimitKey(token.refresh_token, model);
     const data = { model, time: Date.now() };
 
