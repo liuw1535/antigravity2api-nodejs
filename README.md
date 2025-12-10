@@ -1,3 +1,12 @@
+# ADD and FIX  
+
+添加功能
+* socks5支持
+* log level 调试
+* ccr配置，支持gemini和cluade模型,只测试了思考模型。
+* fix gemini-3-pro-high等模型的小bug
+* src/anti-fixer.js 是ccr需要的插件.
+
 # Antigravity to OpenAI API 代理服务
 
 将 Google Antigravity API 转换为 OpenAI 兼容格式的代理服务，支持流式响应、工具调用和多账号管理。
@@ -46,6 +55,7 @@ JWT_SECRET=your-jwt-secret-key-change-this-in-production
 
 # 可选配置
 # PROXY=http://127.0.0.1:7897
+# PROXY=socks5://127.0.0.1:1080
 # SYSTEM_INSTRUCTION=你是聊天机器人
 # IMAGE_BASE_URL=http://your-domain.com
 ```
@@ -303,7 +313,7 @@ curl http://localhost:8045/v1/chat/completions \
 | `ADMIN_USERNAME` | 管理员用户名 | ✅ |
 | `ADMIN_PASSWORD` | 管理员密码 | ✅ |
 | `JWT_SECRET` | JWT 密钥 | ✅ |
-| `PROXY` | 代理地址（如：http://127.0.0.1:7897） | ❌ |
+| `PROXY` | 代理地址，支持 `http`/`https`/`socks5`（如：`http://127.0.0.1:7897` 或 `socks5://127.0.0.1:1080`）<br>若使用 SOCKS 代理会自动切换到 axios 模式 | ❌ |
 | `SYSTEM_INSTRUCTION` | 系统提示词 | ❌ |
 | `IMAGE_BASE_URL` | 图片服务基础 URL | ❌ |
 

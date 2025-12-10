@@ -8,6 +8,7 @@ import log from '../src/utils/logger.js';
 import axios from 'axios';
 import config from '../src/config/config.js';
 import { generateProjectId } from '../src/utils/idGenerator.js';
+import { buildAxiosProxyOptions } from '../src/utils/proxy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,16 +40,7 @@ function generateAuthUrl(port) {
 }
 
 function getAxiosConfig() {
-  const axiosConfig = { timeout: config.timeout };
-  if (config.proxy) {
-    const proxyUrl = new URL(config.proxy);
-    axiosConfig.proxy = {
-      protocol: proxyUrl.protocol.replace(':', ''),
-      host: proxyUrl.hostname,
-      port: parseInt(proxyUrl.port)
-    };
-  }
-  return axiosConfig;
+  return { timeout: config.timeout, ...buildAxiosProxyOptions(config.proxy) };
 }
 
 async function exchangeCodeForToken(code, port) {

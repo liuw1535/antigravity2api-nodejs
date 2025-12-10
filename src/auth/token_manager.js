@@ -6,6 +6,7 @@ import { log } from '../utils/logger.js';
 import { generateSessionId, generateProjectId } from '../utils/idGenerator.js';
 import config from '../config/config.js';
 import { OAUTH_CONFIG } from '../constants/oauth.js';
+import { buildAxiosProxyOptions } from '../utils/proxy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,10 +69,7 @@ class TokenManager {
       },
       data: JSON.stringify({ metadata: { ideType: 'ANTIGRAVITY' } }),
       timeout: config.timeout,
-      proxy: config.proxy ? (() => {
-        const proxyUrl = new URL(config.proxy);
-        return { protocol: proxyUrl.protocol.replace(':', ''), host: proxyUrl.hostname, port: parseInt(proxyUrl.port) };
-      })() : false
+      ...buildAxiosProxyOptions(config.proxy)
     });
     return response.data?.cloudaicompanionProject;
   }
@@ -103,10 +101,7 @@ class TokenManager {
         },
         data: body.toString(),
         timeout: config.timeout,
-        proxy: config.proxy ? (() => {
-          const proxyUrl = new URL(config.proxy);
-          return { protocol: proxyUrl.protocol.replace(':', ''), host: proxyUrl.hostname, port: parseInt(proxyUrl.port) };
-        })() : false
+        ...buildAxiosProxyOptions(config.proxy)
       });
 
       token.access_token = response.data.access_token;
@@ -265,7 +260,7 @@ class TokenManager {
         return { success: false, message: 'Token不存在' };
       }
       
-      allTokens[index] = { ...allTokens[index], ...updates };
+      const { access_token_suffix, ...cleanUpdates } = updates; allTokens[index] = { ...allTokens[index], ...cleanUpdates };
       fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
       
       this.reload();

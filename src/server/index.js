@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -181,7 +182,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       throw new Error('没有可用的token，请运行 npm run login 获取token');
     }
     const isImageModel = model.includes('-image');
-    const requestBody = generateRequestBody(messages, model, params, tools, token);
+    const requestBody = await generateRequestBody(messages, model, params, tools, token);
     if (isImageModel) {
       requestBody.request.generationConfig={
         candidateCount: 1,
@@ -246,6 +247,45 @@ app.post('/v1/chat/completions', async (req, res) => {
   } catch (error) {
     logger.error('生成响应失败:', error.message);
     if (!res.headersSent) {
+      // Claude-specific: Return actual HTTP errors for API failures
+      if (model && model.includes('claude') && error.status && error.status >= 400) {
+        let errorJson;
+        try { errorJson = JSON.parse(error.message); } catch(e) { }
+        
+        // Construct standard OpenAI Error format
+        const errorResponse = {
+            error: {
+                message: errorJson?.error?.message || errorJson?.message || error.message,
+                type: 'invalid_request_error',
+                code: error.status,
+                param: null 
+            }
+        };
+        // If the upstream error already has the structure, try to use it? 
+        // Google errors are usually { error: { code, message, status } }
+        // We'll stick to a clean wrapper.
+        
+        if (stream) {
+             // For stream, we must send an error event if possible or just end?
+             // Usually streaming clients handle HTTP status on connect, but if headers not sent...
+             // setHeaders was called inside 'if (stream)' block? 
+             // Wait, `if (stream)` block calls `setStreamHeaders(res)`. 
+             // If we are here, headers might NOT be sent if error happened in `generateAssistantResponse` (which is awaited).
+             // But `generateAssistantResponse` is awaited *inside* `if (stream)`.
+             // `setStreamHeaders` is called *before* await.
+             // So headers ARE sent (200 OK).
+             // We cannot send 400 now. We must send generic error in stream.
+             // So this 400 logic only applies if `!stream` OR if headers NOT sent.
+             // But the catch block checks `if (!res.headersSent)`.
+             
+             // If headers SENT, we fall through to existing logic (writeStreamData).
+             // If headers NOT SENT, we can send 400.
+             
+             return res.status(error.status).json(errorResponse);
+        } else {
+             return res.status(error.status).json(errorResponse);
+        }
+      }
       const { id, created } = createResponseMeta();
       const errorContent = `错误: ${error.message}`;
       
