@@ -345,7 +345,7 @@ function generateRequestBody(openaiMessages,modelName,parameters,openaiTools,tok
       sessionId: token.sessionId
     },
     model: actualModelName,
-    userAgent: "antigravity"
+    userAgent: "antigravity/1.11.3 windows/amd64"
   };
   
   // 只有当有 system 指令时才添加 systemInstruction 字段
