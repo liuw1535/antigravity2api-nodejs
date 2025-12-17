@@ -4,7 +4,34 @@ import { generateRequestId } from './idGenerator.js';
 import os from 'os';
 
 // 思维链签名占位（用于启用思考模型但没有真实签名时）
-const DEFAULT_THOUGHT_SIGNATURE = 'RXFRRENrZ0lDaEFDR0FJcVFKV1Bvcy9GV20wSmtMV2FmWkFEbGF1ZTZzQTdRcFlTc1NvbklmemtSNFo4c1dqeitIRHBOYW9hS2NYTE1TeTF3bjh2T1RHdE1KVjVuYUNQclZ5cm9DMFNETHk4M0hOSWsrTG1aRUhNZ3hvTTl0ZEpXUDl6UUMzOExxc2ZJakI0UkkxWE1mdWJ1VDQrZnY0Znp0VEoyTlhtMjZKL2daYi9HL1gwcmR4b2x0VE54empLemtLcEp0ZXRia2plb3NBcWlRSWlXUHloMGhVVTk1dHNha1dyNDVWNUo3MTJjZDNxdHQ5Z0dkbjdFaFk4dUllUC9CcThVY2VZZC9YbFpYbDc2bHpEbmdzL2lDZXlNY3NuZXdQMjZBTDRaQzJReXdibVQzbXlSZmpld3ZSaUxxOWR1TVNidHIxYXRtYTJ0U1JIRjI0Z0JwUnpadE1RTmoyMjR4bTZVNUdRNXlOSWVzUXNFNmJzRGNSV0RTMGFVOEZERExybmhVQWZQT2JYMG5lTGR1QnU1VGZOWW9NZGlRbTgyUHVqVE1xaTlmN0t2QmJEUUdCeXdyVXR2eUNnTEFHNHNqeWluZDRCOEg3N2ZJamt5blI3Q3ZpQzlIOTVxSENVTCt3K3JzMmsvV0sxNlVsbGlTK0pET3UxWXpPMWRPOUp3V3hEMHd5ZVU0a0Y5MjIxaUE5Z2lUd2djZXhSU2c4TWJVMm1NSjJlaGdlY3g0YjJ3QloxR0FFPQ==';
+const DEFAULT_THOUGHT_SIGNATURE = 'RXFRRENrZ0lDaEFDR0FJcVFKV1Bvcy9GV20wSmtMV2FmWkFEbGF1ZTZzQTdRcFlTc1NvbklmemtSNFo4c1dqeitIRHBOYW9hS2NYTE1TeTF3bjh2T1RHdE1KVjVuYUNQclZ5cm9DMFNETHk4M0hOSWkrTG1aRUhNZ3hvTTl0ZEpXUDl6UUMzOExxc2ZJakI0UkkxWE1mdWJ1VDQrZnY0Znp0VEoyTlhtMjZKL2daYi9HL1gwcmR4b2x0VE54empLemtLcEp0ZXRia2plb3NBcWlRSWlXUHloMGhVVTk1dHNha1dyNDVWNUo3MTJjZDNxdHQ5Z0dkbjdFaFk4dUllUC9CcThVY2VZZC9YbFpYbDc2bHpEbmdzL2lDZXlNY3NuZXdQMjZBTDRaQzJReXdibVQzbXlSZmpld3ZSaUxxOWR1TVNidHIxYXRtYTJ0U1JIRjI0Z0JwUnpadE1RTmoyMjR4bTZVNUdRNXlOSWVzUXNFNmJzRGNSV0RTMGFVOEZERExybmhVQWZQT2JYMG5lTGR1QnU1VGZOWW9NZGlRbTgyUHVqVE1xaTlmN0t2QmJEUUdCeXdyVXR2eUNnTEFHNHNqeWluZDRCOEg3N2ZJamt5blI3Q3ZpQzlIOTVxSENVTCt3K3JzMmsvV0sxNlVsbGlTK0pET3UxWXpPMWRPOUp3V3hEMHd5ZVU0a0Y5MjIxaUE5Z2lUd2djZXhSU2c4TWJVMm1NSjJlaGdlY3g0YjJ3QloxR0FFPQ==';
+
+// 工具名缓存：安全名 -> { original, lastUsed }
+const TOOL_NAME_CACHE = new Map();
+const TOOL_NAME_CACHE_MAX_SIZE = 1024;              // 正常缓存上限
+const TOOL_NAME_CACHE_MAX_AGE_MS = 30 * 60 * 1000;  // 30 分钟未使用则认为过期
+
+function cleanupToolNameCache() {
+  const now = Date.now();
+
+  // 先按时间淘汰过期项
+  for (const [safeName, entry] of TOOL_NAME_CACHE) {
+    if (now - entry.lastUsed > TOOL_NAME_CACHE_MAX_AGE_MS) {
+      TOOL_NAME_CACHE.delete(safeName);
+    }
+  }
+
+  // 如果仍然超过上限，则按最久未用淘汰
+  if (TOOL_NAME_CACHE.size <= TOOL_NAME_CACHE_MAX_SIZE) return;
+
+  const entries = Array.from(TOOL_NAME_CACHE.entries());
+  entries.sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+
+  for (const [safeName] of entries) {
+    if (TOOL_NAME_CACHE.size <= TOOL_NAME_CACHE_MAX_SIZE) break;
+    TOOL_NAME_CACHE.delete(safeName);
+  }
+}
 
 function extractImagesFromContent(content) {
   const result = { text: '', images: [] };
@@ -58,6 +85,7 @@ function sanitizeToolName(name) {
   if (!name || typeof name !== 'string') {
     return 'tool';
   }
+
   // 替换非法字符为下划线
   let cleaned = name.replace(/[^a-zA-Z0-9_-]/g, '_');
   // 去掉首尾多余下划线
@@ -69,7 +97,30 @@ function sanitizeToolName(name) {
   if (cleaned.length > 128) {
     cleaned = cleaned.slice(0, 128);
   }
+
+  const now = Date.now();
+  const existing = TOOL_NAME_CACHE.get(cleaned);
+  if (existing) {
+    // 已有缓存，只更新最近使用时间，避免频繁创建新映射
+    existing.lastUsed = now;
+  } else {
+    TOOL_NAME_CACHE.set(cleaned, { original: name, lastUsed: now });
+    // 仅在缓存显著膨胀时触发一次清理，避免每次都全量遍历
+    if (TOOL_NAME_CACHE.size > TOOL_NAME_CACHE_MAX_SIZE * 2) {
+      cleanupToolNameCache();
+    }
+  }
+
   return cleaned;
+}
+
+// 将上游返回的安全工具名还原为原始名（如果存在映射）
+function restoreToolName(name) {
+  if (!name || typeof name !== 'string') return name;
+  const entry = TOOL_NAME_CACHE.get(name);
+  if (!entry) return name;
+  entry.lastUsed = Date.now();
+  return entry.original;
 }
 function handleAssistantMessage(message, antigravityMessages, enableThinking){
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
@@ -439,5 +490,6 @@ export{
   generateRequestId,
   generateRequestBody,
   prepareImageRequest,
-  getDefaultIp
+  getDefaultIp,
+  restoreToolName
 }

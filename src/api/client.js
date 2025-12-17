@@ -7,6 +7,7 @@ import { saveBase64Image } from '../utils/imageStorage.js';
 import logger from '../utils/logger.js';
 import memoryManager, { MemoryPressure, registerMemoryPoolCleanup } from '../utils/memoryManager.js';
 import { buildAxiosRequestConfig } from '../utils/httpClient.js';
+import { restoreToolName } from '../utils/utils.js';
 
 // 请求客户端：优先使用 AntigravityRequester，失败则降级到 axios
 let requester = null;
@@ -237,7 +238,8 @@ async function handleApiError(error, token) {
 function convertToToolCall(functionCall) {
   const toolCall = getToolCallObject();
   toolCall.id = functionCall.id || generateToolCallId();
-  toolCall.function.name = functionCall.name;
+  // 将上游安全工具名还原为原始工具名，保证客户端 / MCP 能正确匹配
+  toolCall.function.name = restoreToolName(functionCall.name);
   toolCall.function.arguments = JSON.stringify(functionCall.args);
   return toolCall;
 }
