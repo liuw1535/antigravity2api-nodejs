@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   antigravity2api:
-    build: .
+    image: ghcr.io/liuw1535/antigravity2api-nodejs:latest
     ports:
       - "8045:8045"
     environment:
