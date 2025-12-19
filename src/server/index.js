@@ -1,8 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { generateAssistantResponse, generateAssistantResponseNoStream, getAvailableModels, generateImageForSD, closeRequester } from '../api/client.js';
 import { generateRequestBody, generateGeminiRequestBody, generateClaudeRequestBody, prepareImageRequest } from '../utils/utils.js';
 import logger from '../utils/logger.js';
@@ -11,52 +9,11 @@ import tokenManager from '../auth/token_manager.js';
 import adminRouter from '../routes/admin.js';
 import sdRouter from '../routes/sd.js';
 import memoryManager, { registerMemoryPoolCleanup } from '../utils/memoryManager.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 检测是否在 pkg 打包环境中运行
-const isPkg = typeof process.pkg !== 'undefined';
-
-// 获取静态文件目录
-// pkg 环境下使用可执行文件所在目录的 public 文件夹
-// 开发环境下使用项目根目录的 public 文件夹
-function getPublicDir() {
-  if (isPkg) {
-    // pkg 环境：优先使用可执行文件旁边的 public 目录
-    const exeDir = path.dirname(process.execPath);
-    const exePublicDir = path.join(exeDir, 'public');
-    if (fs.existsSync(exePublicDir)) {
-      return exePublicDir;
-    }
-    // 其次使用当前工作目录的 public 目录
-    const cwdPublicDir = path.join(process.cwd(), 'public');
-    if (fs.existsSync(cwdPublicDir)) {
-      return cwdPublicDir;
-    }
-    // 最后使用打包内的 public 目录（通过 snapshot）
-    return path.join(__dirname, '../../public');
-  }
-  // 开发环境
-  return path.join(__dirname, '../../public');
-}
+import { getPublicDir, getRelativePath } from '../utils/paths.js';
+import { DEFAULT_HEARTBEAT_INTERVAL, MEMORY_CHECK_INTERVAL } from '../constants/index.js';
+import { buildOpenAIErrorPayload, errorHandler, ValidationError } from '../utils/errors.js';
 
 const publicDir = getPublicDir();
-
-// 计算相对路径用于日志显示
-function getRelativePath(absolutePath) {
-  if (isPkg) {
-    const exeDir = path.dirname(process.execPath);
-    if (absolutePath.startsWith(exeDir)) {
-      return '.' + absolutePath.slice(exeDir.length).replace(/\\/g, '/');
-    }
-    const cwdDir = process.cwd();
-    if (absolutePath.startsWith(cwdDir)) {
-      return '.' + absolutePath.slice(cwdDir.length).replace(/\\/g, '/');
-    }
-  }
-  return absolutePath;
-}
 
 logger.info(`静态文件目录: ${getRelativePath(publicDir)}`);
 
@@ -84,7 +41,7 @@ const with429Retry = async (fn, maxRetries, loggerPrefix = '') => {
 };
 
 // ==================== 心跳机制（防止 CF 超时） ====================
-const HEARTBEAT_INTERVAL = config.server.heartbeatInterval || 15000; // 从配置读取心跳间隔
+const HEARTBEAT_INTERVAL = config.server.heartbeatInterval || DEFAULT_HEARTBEAT_INTERVAL;
 const SSE_HEARTBEAT = Buffer.from(': heartbeat\n\n');
 
 // 创建心跳定时器
@@ -136,7 +93,7 @@ const releaseChunkObject = (obj) => {
 registerMemoryPoolCleanup(chunkPool, () => memoryManager.getPoolSizes().chunk);
 
 // 启动内存管理器
-memoryManager.start(30000);
+memoryManager.start(MEMORY_CHECK_INTERVAL);
 
 const createStreamChunk = (id, created, model, delta, finish_reason = null) => {
   const chunk = getChunkObject();
@@ -152,11 +109,6 @@ const createStreamChunk = (id, created, model, delta, finish_reason = null) => {
 // 工具函数：零拷贝写入流式数据
 const writeStreamData = (res, data) => {
   const json = JSON.stringify(data);
-  // 释放对象回池
-  const delta = { reasoning_content: data.reasoning_content };
-  if (data.thoughtSignature) {
-    delta.thoughtSignature = data.thoughtSignature;
-  }
   res.write(SSE_PREFIX);
   res.write(json);
   res.write(SSE_SUFFIX);
@@ -169,38 +121,6 @@ const endStream = (res) => {
   res.end();
 };
 
-// OpenAI 兼容错误响应构造
-const buildOpenAIErrorPayload = (error, statusCode) => {
-  if (error.isUpstreamApiError && error.rawBody) {
-    try {
-      const raw = typeof error.rawBody === 'string' ? JSON.parse(error.rawBody) : error.rawBody;
-      const inner = raw.error || raw;
-      return {
-        error: {
-          message: inner.message || error.message || 'Upstream API error',
-          type: inner.type || 'upstream_api_error',
-          code: inner.code ?? statusCode
-        }
-      };
-    } catch {
-      return {
-        error: {
-          message: error.rawBody || error.message || 'Upstream API error',
-          type: 'upstream_api_error',
-          code: statusCode
-        }
-      };
-    }
-  }
-
-  return {
-    error: {
-      message: error.message || 'Internal server error',
-      type: 'server_error',
-      code: statusCode
-    }
-  };
-};
 
 // Gemini 兼容错误响应构造
 const buildGeminiErrorPayload = (error, statusCode) => {
@@ -278,12 +198,8 @@ app.use(express.static(publicDir));
 // 管理路由
 app.use('/admin', adminRouter);
 
-app.use((err, req, res, next) => {
-  if (err.type === 'entity.too.large') {
-    return res.status(413).json({ error: `请求体过大，最大支持 ${config.security.maxRequestSize}` });
-  }
-  next(err);
-});
+// 使用统一错误处理中间件
+app.use(errorHandler);
 
 app.use((req, res, next) => {
   const ignorePaths = ['/images', '/favicon.ico', '/.well-known', '/sdapi/v1/options', '/sdapi/v1/samplers', '/sdapi/v1/schedulers', '/sdapi/v1/upscalers', '/sdapi/v1/latent-upscale-modes', '/sdapi/v1/sd-vae', '/sdapi/v1/sd-modules'];
@@ -390,13 +306,21 @@ app.post('/v1/chat/completions', async (req, res) => {
                 usageData = data.usage;
               } else if (data.type === 'reasoning') {
                 const delta = { reasoning_content: data.reasoning_content };
-                if (data.thoughtSignature) {
+                if (data.thoughtSignature && config.passSignatureToClient) {
                   delta.thoughtSignature = data.thoughtSignature;
                 }
                 writeStreamData(res, createStreamChunk(id, created, model, delta));
               } else if (data.type === 'tool_calls') {
                 hasToolCall = true;
-                const toolCallsWithIndex = data.tool_calls.map((toolCall, index) => ({ index, ...toolCall }));
+                // 根据配置决定是否透传工具调用中的签名
+                const toolCallsWithIndex = data.tool_calls.map((toolCall, index) => {
+                  if (config.passSignatureToClient) {
+                    return { index, ...toolCall };
+                  } else {
+                    const { thoughtSignature, ...rest } = toolCall;
+                    return { index, ...rest };
+                  }
+                });
                 const delta = { tool_calls: toolCallsWithIndex };
                 writeStreamData(res, createStreamChunk(id, created, model, delta));
               } else {
@@ -430,9 +354,16 @@ app.post('/v1/chat/completions', async (req, res) => {
       // DeepSeek 格式：reasoning_content 在 content 之前
       const message = { role: 'assistant' };
       if (reasoningContent) message.reasoning_content = reasoningContent;
-      if (reasoningSignature) message.thoughtSignature = reasoningSignature;
+      if (reasoningSignature && config.passSignatureToClient) message.thoughtSignature = reasoningSignature;
       message.content = content;
-      if (toolCalls.length > 0) message.tool_calls = toolCalls;
+      if (toolCalls.length > 0) {
+        // 根据配置决定是否透传工具调用中的签名
+        if (config.passSignatureToClient) {
+          message.tool_calls = toolCalls;
+        } else {
+          message.tool_calls = toolCalls.map(({ thoughtSignature, ...rest }) => rest);
+        }
+      }
       
       // 使用预构建的响应对象，减少内存分配
       const response = {

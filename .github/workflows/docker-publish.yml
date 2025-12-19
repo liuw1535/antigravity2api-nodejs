@@ -72,6 +72,7 @@ jobs:
           tags: |
             type=ref,event=branch,suffix=${{ matrix.tag_suffix }}
             type=raw,value=binary${{ matrix.tag_suffix }},enable=true
+            type=raw,value=latest${{ matrix.tag_suffix }},enable=${{ github.ref == 'refs/heads/binary-build' }}
 
       - name: Build and push (${{ matrix.arch }})
         uses: docker/build-push-action@v5

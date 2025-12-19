@@ -46,11 +46,6 @@ async function loadConfig() {
             const form = document.getElementById('configForm');
             const { env, json } = data.data;
             
-            const serverInfo = document.getElementById('serverInfo');
-            if (serverInfo && json.server) {
-                serverInfo.textContent = `${json.server.host || '0.0.0.0'}:${json.server.port || 8045}`;
-            }
-            
             Object.entries(env).forEach(([key, value]) => {
                 const input = form.elements[key];
                 if (input) input.value = value || '';
@@ -76,6 +71,7 @@ async function loadConfig() {
                 if (form.elements['SKIP_PROJECT_ID_FETCH']) form.elements['SKIP_PROJECT_ID_FETCH'].checked = json.other.skipProjectIdFetch || false;
                 if (form.elements['USE_NATIVE_AXIOS']) form.elements['USE_NATIVE_AXIOS'].checked = json.other.useNativeAxios !== false;
                 if (form.elements['USE_CONTEXT_SYSTEM_PROMPT']) form.elements['USE_CONTEXT_SYSTEM_PROMPT'].checked = json.other.useContextSystemPrompt || false;
+                if (form.elements['PASS_SIGNATURE_TO_CLIENT']) form.elements['PASS_SIGNATURE_TO_CLIENT'].checked = json.other.passSignatureToClient || false;
             }
             if (json.rotation) {
                 if (form.elements['ROTATION_STRATEGY']) {
@@ -114,6 +110,7 @@ async function saveConfig(e) {
     jsonConfig.other.skipProjectIdFetch = form.elements['SKIP_PROJECT_ID_FETCH']?.checked || false;
     jsonConfig.other.useNativeAxios = form.elements['USE_NATIVE_AXIOS']?.checked || false;
     jsonConfig.other.useContextSystemPrompt = form.elements['USE_CONTEXT_SYSTEM_PROMPT']?.checked || false;
+    jsonConfig.other.passSignatureToClient = form.elements['PASS_SIGNATURE_TO_CLIENT']?.checked || false;
     
     Object.entries(allConfig).forEach(([key, value]) => {
         if (sensitiveKeys.includes(key)) {
@@ -137,7 +134,7 @@ async function saveConfig(e) {
                 const num = parseInt(value);
                 jsonConfig.other.retryTimes = Number.isNaN(num) ? undefined : num;
             }
-            else if (key === 'SKIP_PROJECT_ID_FETCH' || key === 'USE_NATIVE_AXIOS' || key === 'USE_CONTEXT_SYSTEM_PROMPT') {
+            else if (key === 'SKIP_PROJECT_ID_FETCH' || key === 'USE_NATIVE_AXIOS' || key === 'USE_CONTEXT_SYSTEM_PROMPT' || key === 'PASS_SIGNATURE_TO_CLIENT') {
                 // 跳过，已在上面处理
             }
             else if (key === 'ROTATION_STRATEGY') jsonConfig.rotation.strategy = value || undefined;

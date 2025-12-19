@@ -1,5 +1,4 @@
 import express from 'express';
-import fs from 'fs';
 import { generateToken, authMiddleware } from '../auth/jwt.js';
 import tokenManager from '../auth/token_manager.js';
 import quotaManager from '../auth/quota_manager.js';
@@ -10,37 +9,8 @@ import { parseEnvFile, updateEnvFile } from '../utils/envParser.js';
 import { reloadConfig } from '../utils/configReloader.js';
 import { deepMerge } from '../utils/deepMerge.js';
 import { getModelsWithQuotas } from '../api/client.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { getEnvPath } from '../utils/paths.js';
 import dotenv from 'dotenv';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 检测是否在 pkg 打包环境中运行
-const isPkg = typeof process.pkg !== 'undefined';
-
-// 获取 .env 文件路径
-// pkg 环境下使用可执行文件所在目录或当前工作目录
-function getEnvPath() {
-  if (isPkg) {
-    // pkg 环境：优先使用可执行文件旁边的 .env
-    const exeDir = path.dirname(process.execPath);
-    const exeEnvPath = path.join(exeDir, '.env');
-    if (fs.existsSync(exeEnvPath)) {
-      return exeEnvPath;
-    }
-    // 其次使用当前工作目录的 .env
-    const cwdEnvPath = path.join(process.cwd(), '.env');
-    if (fs.existsSync(cwdEnvPath)) {
-      return cwdEnvPath;
-    }
-    // 返回可执行文件目录的路径（即使不存在）
-    return exeEnvPath;
-  }
-  // 开发环境
-  return path.join(__dirname, '../../.env');
-}
 
 const envPath = getEnvPath();
 
@@ -59,12 +29,17 @@ router.post('/login', (req, res) => {
 });
 
 // Token管理API - 需要JWT认证
-router.get('/tokens', authMiddleware, (req, res) => {
-  const tokens = tokenManager.getTokenList();
-  res.json({ success: true, data: tokens });
+router.get('/tokens', authMiddleware, async (req, res) => {
+  try {
+    const tokens = await tokenManager.getTokenList();
+    res.json({ success: true, data: tokens });
+  } catch (error) {
+    logger.error('获取Token列表失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
-router.post('/tokens', authMiddleware, (req, res) => {
+router.post('/tokens', authMiddleware, async (req, res) => {
   const { access_token, refresh_token, expires_in, timestamp, enable, projectId, email } = req.body;
   if (!access_token || !refresh_token) {
     return res.status(400).json({ success: false, message: 'access_token和refresh_token必填' });
@@ -75,21 +50,36 @@ router.post('/tokens', authMiddleware, (req, res) => {
   if (projectId) tokenData.projectId = projectId;
   if (email) tokenData.email = email;
   
-  const result = tokenManager.addToken(tokenData);
-  res.json(result);
+  try {
+    const result = await tokenManager.addToken(tokenData);
+    res.json(result);
+  } catch (error) {
+    logger.error('添加Token失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
-router.put('/tokens/:refreshToken', authMiddleware, (req, res) => {
+router.put('/tokens/:refreshToken', authMiddleware, async (req, res) => {
   const { refreshToken } = req.params;
   const updates = req.body;
-  const result = tokenManager.updateToken(refreshToken, updates);
-  res.json(result);
+  try {
+    const result = await tokenManager.updateToken(refreshToken, updates);
+    res.json(result);
+  } catch (error) {
+    logger.error('更新Token失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
-router.delete('/tokens/:refreshToken', authMiddleware, (req, res) => {
+router.delete('/tokens/:refreshToken', authMiddleware, async (req, res) => {
   const { refreshToken } = req.params;
-  const result = tokenManager.deleteToken(refreshToken);
-  res.json(result);
+  try {
+    const result = await tokenManager.deleteToken(refreshToken);
+    res.json(result);
+  } catch (error) {
+    logger.error('删除Token失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 router.post('/tokens/reload', authMiddleware, async (req, res) => {
@@ -202,7 +192,7 @@ router.get('/tokens/:refreshToken/quotas', authMiddleware, async (req, res) => {
   try {
     const { refreshToken } = req.params;
     const forceRefresh = req.query.refresh === 'true';
-    const tokens = tokenManager.getTokenList();
+    const tokens = await tokenManager.getTokenList();
     let tokenData = tokens.find(t => t.refresh_token === refreshToken);
     
     if (!tokenData) {

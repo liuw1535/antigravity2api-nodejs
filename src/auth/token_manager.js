@@ -1,53 +1,15 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { log } from '../utils/logger.js';
 import { generateSessionId, generateProjectId } from '../utils/idGenerator.js';
 import config, { getConfigJson } from '../config/config.js';
 import { OAUTH_CONFIG } from '../constants/oauth.js';
 import { buildAxiosRequestConfig } from '../utils/httpClient.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 检测是否在 pkg 打包环境中运行
-const isPkg = typeof process.pkg !== 'undefined';
-
-// 获取数据目录路径
-// pkg 环境下使用可执行文件所在目录或当前工作目录
-function getDataDir() {
-  if (isPkg) {
-    // pkg 环境：优先使用可执行文件旁边的 data 目录
-    const exeDir = path.dirname(process.execPath);
-    const exeDataDir = path.join(exeDir, 'data');
-    // 检查是否可以在该目录创建文件
-    try {
-      if (!fs.existsSync(exeDataDir)) {
-        fs.mkdirSync(exeDataDir, { recursive: true });
-      }
-      return exeDataDir;
-    } catch (e) {
-      // 如果无法创建，尝试当前工作目录
-      const cwdDataDir = path.join(process.cwd(), 'data');
-      try {
-        if (!fs.existsSync(cwdDataDir)) {
-          fs.mkdirSync(cwdDataDir, { recursive: true });
-        }
-        return cwdDataDir;
-      } catch (e2) {
-        // 最后使用用户主目录
-        const homeDataDir = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.antigravity', 'data');
-        if (!fs.existsSync(homeDataDir)) {
-          fs.mkdirSync(homeDataDir, { recursive: true });
-        }
-        return homeDataDir;
-      }
-    }
-  }
-  // 开发环境
-  return path.join(__dirname, '..', '..', 'data');
-}
+import {
+  DEFAULT_REQUEST_COUNT_PER_TOKEN,
+  TOKEN_REFRESH_BUFFER
+} from '../constants/index.js';
+import TokenStore from './token_store.js';
+import { TokenError } from '../utils/errors.js';
 
 // 轮询策略枚举
 const RotationStrategy = {
@@ -56,37 +18,43 @@ const RotationStrategy = {
   REQUEST_COUNT: 'request_count'        // 自定义次数后切换
 };
 
+/**
+ * Token 管理器
+ * 负责 Token 的存储、轮询、刷新等功能
+ */
 class TokenManager {
-  constructor(filePath = path.join(getDataDir(), 'accounts.json')) {
-    this.filePath = filePath;
+  /**
+   * @param {string} filePath - Token 数据文件路径
+   */
+  constructor(filePath) {
+    this.store = new TokenStore(filePath);
+    /** @type {Array<Object>} */
     this.tokens = [];
+    /** @type {number} */
     this.currentIndex = 0;
     
     // 轮询策略相关 - 使用原子操作避免锁
+    /** @type {string} */
     this.rotationStrategy = RotationStrategy.ROUND_ROBIN;
-    this.requestCountPerToken = 50;  // request_count 策略下每个token请求次数后切换
-    this.tokenRequestCounts = new Map();  // 记录每个token的请求次数
+    /** @type {number} */
+    this.requestCountPerToken = DEFAULT_REQUEST_COUNT_PER_TOKEN;
+    /** @type {Map<string, number>} */
+    this.tokenRequestCounts = new Map();
     
-    this.ensureFileExists();
-    this.initialize();
+    // 针对额度耗尽策略的可用 token 索引缓存（优化大规模账号场景）
+    /** @type {number[]} */
+    this.availableQuotaTokenIndices = [];
+    /** @type {number} */
+    this.currentQuotaIndex = 0;
+
+    /** @type {Promise<void>|null} */
+    this._initPromise = null;
   }
 
-  ensureFileExists() {
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(this.filePath)) {
-      fs.writeFileSync(this.filePath, '[]', 'utf8');
-      log.info('✓ 已创建账号配置文件');
-    }
-  }
-
-  async initialize() {
+  async _initialize() {
     try {
       log.info('正在初始化token管理器...');
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      let tokenArray = JSON.parse(data);
+      const tokenArray = await this.store.readAll();
       
       this.tokens = tokenArray.filter(token => token.enable !== false).map(token => ({
         ...token,
@@ -95,6 +63,7 @@ class TokenManager {
       
       this.currentIndex = 0;
       this.tokenRequestCounts.clear();
+      this._rebuildAvailableQuotaTokens();
       
       // 加载轮询策略配置
       this.loadRotationConfig();
@@ -110,11 +79,85 @@ class TokenManager {
         } else {
           log.info(`轮询策略: ${this.rotationStrategy}`);
         }
+        
+        // 并发刷新所有过期的 token
+        await this._refreshExpiredTokensConcurrently();
       }
     } catch (error) {
       log.error('初始化token失败:', error.message);
       this.tokens = [];
     }
+  }
+
+  /**
+   * 并发刷新所有过期的 token
+   * @private
+   */
+  async _refreshExpiredTokensConcurrently() {
+    const expiredTokens = this.tokens.filter(token => this.isExpired(token));
+    if (expiredTokens.length === 0) {
+      return;
+    }
+
+    log.info(`发现 ${expiredTokens.length} 个过期token，开始并发刷新...`);
+    const startTime = Date.now();
+
+    const results = await Promise.allSettled(
+      expiredTokens.map(token => this._refreshTokenSafe(token))
+    );
+
+    let successCount = 0;
+    let failCount = 0;
+    const tokensToDisable = [];
+
+    results.forEach((result, index) => {
+      const token = expiredTokens[index];
+      if (result.status === 'fulfilled') {
+        if (result.value === 'success') {
+          successCount++;
+        } else if (result.value === 'disable') {
+          tokensToDisable.push(token);
+          failCount++;
+        }
+      } else {
+        failCount++;
+        log.error(`...${token.access_token?.slice(-8) || 'unknown'} 刷新失败:`, result.reason?.message || result.reason);
+      }
+    });
+
+    // 批量禁用失效的 token
+    for (const token of tokensToDisable) {
+      this.disableToken(token);
+    }
+
+    const elapsed = Date.now() - startTime;
+    log.info(`并发刷新完成: 成功 ${successCount}, 失败 ${failCount}, 耗时 ${elapsed}ms`);
+  }
+
+  /**
+   * 安全刷新单个 token（不抛出异常）
+   * @param {Object} token - Token 对象
+   * @returns {Promise<'success'|'disable'|'skip'>} 刷新结果
+   * @private
+   */
+  async _refreshTokenSafe(token) {
+    try {
+      await this.refreshToken(token);
+      return 'success';
+    } catch (error) {
+      if (error.statusCode === 403 || error.statusCode === 400) {
+        log.warn(`...${token.access_token?.slice(-8) || 'unknown'}: Token 已失效，将被禁用`);
+        return 'disable';
+      }
+      throw error;
+    }
+  }
+
+  async _ensureInitialized() {
+    if (!this._initPromise) {
+      this._initPromise = this._initialize();
+    }
+    return this._initPromise;
   }
 
   // 加载轮询策略配置
@@ -147,6 +190,33 @@ class TokenManager {
     }
   }
 
+  // 重建额度耗尽策略下的可用 token 列表
+  _rebuildAvailableQuotaTokens() {
+    this.availableQuotaTokenIndices = [];
+    this.tokens.forEach((token, index) => {
+      if (token.enable !== false && token.hasQuota !== false) {
+        this.availableQuotaTokenIndices.push(index);
+      }
+    });
+
+    if (this.availableQuotaTokenIndices.length === 0) {
+      this.currentQuotaIndex = 0;
+    } else {
+      this.currentQuotaIndex = this.currentQuotaIndex % this.availableQuotaTokenIndices.length;
+    }
+  }
+
+  // 从额度耗尽策略的可用列表中移除指定下标
+  _removeQuotaIndex(tokenIndex) {
+    const pos = this.availableQuotaTokenIndices.indexOf(tokenIndex);
+    if (pos !== -1) {
+      this.availableQuotaTokenIndices.splice(pos, 1);
+      if (this.currentQuotaIndex >= this.availableQuotaTokenIndices.length) {
+        this.currentQuotaIndex = 0;
+      }
+    }
+  }
+
   async fetchProjectId(token) {
     const response = await axios(buildAxiosRequestConfig({
       method: 'POST',
@@ -163,10 +233,15 @@ class TokenManager {
     return response.data?.cloudaicompanionProject;
   }
 
+  /**
+   * 检查 Token 是否过期
+   * @param {Object} token - Token 对象
+   * @returns {boolean} 是否过期
+   */
   isExpired(token) {
     if (!token.timestamp || !token.expires_in) return true;
     const expiresAt = token.timestamp + (token.expires_in * 1000);
-    return Date.now() >= expiresAt - 300000;
+    return Date.now() >= expiresAt - TOKEN_REFRESH_BUFFER;
   }
 
   async refreshToken(token) {
@@ -197,37 +272,19 @@ class TokenManager {
       this.saveToFile(token);
       return token;
     } catch (error) {
-      throw { statusCode: error.response?.status, message: error.response?.data || error.message };
+      const statusCode = error.response?.status;
+      const rawBody = error.response?.data;
+      const suffix = token.access_token ? token.access_token.slice(-8) : null;
+      const message = typeof rawBody === 'string' ? rawBody : (rawBody?.error?.message || error.message || '刷新 token 失败');
+      throw new TokenError(message, suffix, statusCode || 500);
     }
   }
 
   saveToFile(tokenToUpdate = null) {
-    try {
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      const allTokens = JSON.parse(data);
-      
-      // 如果指定了要更新的token，直接更新它
-      if (tokenToUpdate) {
-        const index = allTokens.findIndex(t => t.refresh_token === tokenToUpdate.refresh_token);
-        if (index !== -1) {
-          const { sessionId, ...tokenToSave } = tokenToUpdate;
-          allTokens[index] = tokenToSave;
-        }
-      } else {
-        // 否则更新内存中的所有token
-        this.tokens.forEach(memToken => {
-          const index = allTokens.findIndex(t => t.refresh_token === memToken.refresh_token);
-          if (index !== -1) {
-            const { sessionId, ...tokenToSave } = memToken;
-            allTokens[index] = tokenToSave;
-          }
-        });
-      }
-      
-      fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
-    } catch (error) {
-      log.error('保存文件失败:', error.message);
-    }
+    // 保持与旧接口同步调用方式一致，内部使用异步写入
+    this.store.mergeActiveTokens(this.tokens, tokenToUpdate).catch((error) => {
+      log.error('保存账号配置文件失败:', error.message);
+    });
   }
 
   disableToken(token) {
@@ -236,6 +293,8 @@ class TokenManager {
     this.saveToFile();
     this.tokens = this.tokens.filter(t => t.refresh_token !== token.refresh_token);
     this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
+    // tokens 结构发生变化时，重建额度耗尽策略下的可用列表
+    this._rebuildAvailableQuotaTokens();
   }
 
   // 原子操作：获取并递增请求计数
@@ -284,8 +343,11 @@ class TokenManager {
     this.saveToFile(token);
     log.warn(`...${token.access_token.slice(-8)}: 额度已耗尽，标记为无额度`);
     
-    // 如果是额度耗尽策略，立即切换到下一个token
     if (this.rotationStrategy === RotationStrategy.QUOTA_EXHAUSTED) {
+      const tokenIndex = this.tokens.findIndex(t => t.refresh_token === token.refresh_token);
+      if (tokenIndex !== -1) {
+        this._removeQuotaIndex(tokenIndex);
+      }
       this.currentIndex = (this.currentIndex + 1) % Math.max(this.tokens.length, 1);
     }
   }
@@ -297,77 +359,171 @@ class TokenManager {
     log.info(`...${token.access_token.slice(-8)}: 额度已恢复`);
   }
 
+  /**
+   * 准备单个 token（刷新 + 获取 projectId）
+   * @param {Object} token - Token 对象
+   * @returns {Promise<'ready'|'skip'|'disable'>} 处理结果
+   * @private
+   */
+  async _prepareToken(token) {
+    // 刷新过期 token
+    if (this.isExpired(token)) {
+      await this.refreshToken(token);
+    }
+
+    // 获取 projectId
+    if (!token.projectId) {
+      if (config.skipProjectIdFetch) {
+        token.projectId = generateProjectId();
+        this.saveToFile(token);
+        log.info(`...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`);
+      } else {
+        const projectId = await this.fetchProjectId(token);
+        if (projectId === undefined) {
+          log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`);
+          return 'disable';
+        }
+        token.projectId = projectId;
+        this.saveToFile(token);
+      }
+    }
+
+    return 'ready';
+  }
+
+  /**
+   * 处理 token 准备过程中的错误
+   * @param {Error} error - 错误对象
+   * @param {Object} token - Token 对象
+   * @returns {'disable'|'skip'} 处理结果
+   * @private
+   */
+  _handleTokenError(error, token) {
+    const suffix = token.access_token?.slice(-8) || 'unknown';
+    if (error.statusCode === 403 || error.statusCode === 400) {
+      log.warn(`...${suffix}: Token 已失效或错误，已自动禁用该账号`);
+      return 'disable';
+    }
+    log.error(`...${suffix} 操作失败:`, error.message);
+    return 'skip';
+  }
+
+  /**
+   * 重置所有 token 的额度状态
+   * @private
+   */
+  _resetAllQuotas() {
+    log.warn('所有token额度已耗尽，重置额度状态');
+    this.tokens.forEach(t => {
+      t.hasQuota = true;
+    });
+    this.saveToFile();
+    this._rebuildAvailableQuotaTokens();
+  }
+
   async getToken() {
+    await this._ensureInitialized();
     if (this.tokens.length === 0) return null;
 
+    // 针对额度耗尽策略做单独的高性能处理
+    if (this.rotationStrategy === RotationStrategy.QUOTA_EXHAUSTED) {
+      return this._getTokenForQuotaExhaustedStrategy();
+    }
+
+    return this._getTokenForDefaultStrategy();
+  }
+
+  /**
+   * 额度耗尽策略的 token 获取
+   * @private
+   */
+  async _getTokenForQuotaExhaustedStrategy() {
+    // 如果当前没有可用 token，尝试重置额度
+    if (this.availableQuotaTokenIndices.length === 0) {
+      this._resetAllQuotas();
+    }
+
+    const totalAvailable = this.availableQuotaTokenIndices.length;
+    if (totalAvailable === 0) {
+      return null;
+    }
+
+    const startIndex = this.currentQuotaIndex % totalAvailable;
+
+    for (let i = 0; i < totalAvailable; i++) {
+      const listIndex = (startIndex + i) % totalAvailable;
+      const tokenIndex = this.availableQuotaTokenIndices[listIndex];
+      const token = this.tokens[tokenIndex];
+
+      try {
+        const result = await this._prepareToken(token);
+        if (result === 'disable') {
+          this.disableToken(token);
+          this._rebuildAvailableQuotaTokens();
+          if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
+            return null;
+          }
+          continue;
+        }
+
+        this.currentIndex = tokenIndex;
+        this.currentQuotaIndex = listIndex;
+        return token;
+      } catch (error) {
+        const action = this._handleTokenError(error, token);
+        if (action === 'disable') {
+          this.disableToken(token);
+          this._rebuildAvailableQuotaTokens();
+          if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
+            return null;
+          }
+        }
+        // skip: 继续尝试下一个 token
+      }
+    }
+
+    // 所有可用 token 都不可用，重置额度状态
+    this._resetAllQuotas();
+    return this.tokens[0] || null;
+  }
+
+  /**
+   * 默认策略（round_robin / request_count）的 token 获取
+   * @private
+   */
+  async _getTokenForDefaultStrategy() {
     const totalTokens = this.tokens.length;
     const startIndex = this.currentIndex;
 
     for (let i = 0; i < totalTokens; i++) {
       const index = (startIndex + i) % totalTokens;
       const token = this.tokens[index];
-      
-      // 额度耗尽策略：跳过无额度的token
-      if (this.rotationStrategy === RotationStrategy.QUOTA_EXHAUSTED && token.hasQuota === false) {
-        continue;
-      }
-      
+
       try {
-        if (this.isExpired(token)) {
-          await this.refreshToken(token);
-        }
-        if (!token.projectId) {
-          if (config.skipProjectIdFetch) {
-            token.projectId = generateProjectId();
-            this.saveToFile(token);
-            log.info(`...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`);
-          } else {
-            try {
-              const projectId = await this.fetchProjectId(token);
-              if (projectId === undefined) {
-                log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，跳过保存`);
-                this.disableToken(token);
-                if (this.tokens.length === 0) return null;
-                continue;
-              }
-              token.projectId = projectId;
-              this.saveToFile(token);
-            } catch (error) {
-              log.error(`...${token.access_token.slice(-8)}: 获取projectId失败:`, error.message);
-              continue;
-            }
-          }
-        }
-        
-        // 更新当前索引
-        this.currentIndex = index;
-        
-        // 根据策略决定是否切换
-        if (this.shouldRotate(token)) {
-          this.currentIndex = (this.currentIndex + 1) % totalTokens;
-        }
-        
-        return token;
-      } catch (error) {
-        if (error.statusCode === 403 || error.statusCode === 400) {
-          log.warn(`...${token.access_token.slice(-8)}: Token 已失效或错误，已自动禁用该账号`);
+        const result = await this._prepareToken(token);
+        if (result === 'disable') {
           this.disableToken(token);
           if (this.tokens.length === 0) return null;
-        } else {
-          log.error(`...${token.access_token.slice(-8)} 刷新失败:`, error.message);
+          continue;
         }
-      }
-    }
 
-    // 如果所有token都无额度，重置所有token的额度状态并重试
-    if (this.rotationStrategy === RotationStrategy.QUOTA_EXHAUSTED) {
-      log.warn('所有token额度已耗尽，重置额度状态');
-      this.tokens.forEach(t => {
-        t.hasQuota = true;
-      });
-      this.saveToFile();
-      // 返回第一个可用token
-      return this.tokens[0] || null;
+        // 更新当前索引
+        this.currentIndex = index;
+
+        // 根据策略决定是否切换
+        if (this.shouldRotate(token)) {
+          this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+        }
+
+        return token;
+      } catch (error) {
+        const action = this._handleTokenError(error, token);
+        if (action === 'disable') {
+          this.disableToken(token);
+          if (this.tokens.length === 0) return null;
+        }
+        // skip: 继续尝试下一个 token
+      }
     }
 
     return null;
@@ -382,15 +538,14 @@ class TokenManager {
 
   // API管理方法
   async reload() {
-    await this.initialize();
+    this._initPromise = this._initialize();
+    await this._initPromise;
     log.info('Token已热重载');
   }
 
-  addToken(tokenData) {
+  async addToken(tokenData) {
     try {
-      this.ensureFileExists();
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      const allTokens = JSON.parse(data);
+      const allTokens = await this.store.readAll();
       
       const newToken = {
         access_token: tokenData.access_token,
@@ -411,9 +566,9 @@ class TokenManager {
       }
       
       allTokens.push(newToken);
-      fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
+      await this.store.writeAll(allTokens);
       
-      this.reload();
+      await this.reload();
       return { success: true, message: 'Token添加成功' };
     } catch (error) {
       log.error('添加Token失败:', error.message);
@@ -421,11 +576,9 @@ class TokenManager {
     }
   }
 
-  updateToken(refreshToken, updates) {
+  async updateToken(refreshToken, updates) {
     try {
-      this.ensureFileExists();
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      const allTokens = JSON.parse(data);
+      const allTokens = await this.store.readAll();
       
       const index = allTokens.findIndex(t => t.refresh_token === refreshToken);
       if (index === -1) {
@@ -433,9 +586,9 @@ class TokenManager {
       }
       
       allTokens[index] = { ...allTokens[index], ...updates };
-      fs.writeFileSync(this.filePath, JSON.stringify(allTokens, null, 2), 'utf8');
+      await this.store.writeAll(allTokens);
       
-      this.reload();
+      await this.reload();
       return { success: true, message: 'Token更新成功' };
     } catch (error) {
       log.error('更新Token失败:', error.message);
@@ -443,20 +596,18 @@ class TokenManager {
     }
   }
 
-  deleteToken(refreshToken) {
+  async deleteToken(refreshToken) {
     try {
-      this.ensureFileExists();
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      const allTokens = JSON.parse(data);
+      const allTokens = await this.store.readAll();
       
       const filteredTokens = allTokens.filter(t => t.refresh_token !== refreshToken);
       if (filteredTokens.length === allTokens.length) {
         return { success: false, message: 'Token不存在' };
       }
       
-      fs.writeFileSync(this.filePath, JSON.stringify(filteredTokens, null, 2), 'utf8');
+      await this.store.writeAll(filteredTokens);
       
-      this.reload();
+      await this.reload();
       return { success: true, message: 'Token删除成功' };
     } catch (error) {
       log.error('删除Token失败:', error.message);
@@ -464,11 +615,9 @@ class TokenManager {
     }
   }
 
-  getTokenList() {
+  async getTokenList() {
     try {
-      this.ensureFileExists();
-      const data = fs.readFileSync(this.filePath, 'utf8');
-      const allTokens = JSON.parse(data);
+      const allTokens = await this.store.readAll();
       
       return allTokens.map(token => ({
         refresh_token: token.refresh_token,

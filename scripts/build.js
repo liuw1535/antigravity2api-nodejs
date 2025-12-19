@@ -98,8 +98,9 @@ const pkgJson = {
   pkg: {
     assets: [
       toSlash(path.join(rootDir, 'public', '*.html')),
-      toSlash(path.join(rootDir, 'public', '*.js')),
       toSlash(path.join(rootDir, 'public', '*.css')),
+      toSlash(path.join(rootDir, 'public', 'js', '*.js')),
+      toSlash(path.join(rootDir, 'public', 'assets', '*')),
       toSlash(path.join(rootDir, 'src', 'bin', '*'))
     ]
   }
@@ -189,18 +190,12 @@ try {
     if (fs.existsSync(publicDestDir)) {
       fs.rmSync(publicDestDir, { recursive: true, force: true });
     }
-    fs.mkdirSync(publicDestDir, { recursive: true });
-    const publicFiles = fs.readdirSync(publicSrcDir);
-    for (const file of publicFiles) {
-      if (file === 'images') continue; // 跳过 images 目录
-      const srcPath = path.join(publicSrcDir, file);
-      const destPath = path.join(publicDestDir, file);
-      const stat = fs.statSync(srcPath);
-      if (stat.isFile()) {
-        fs.copyFileSync(srcPath, destPath);
-      } else if (stat.isDirectory()) {
-        fs.cpSync(srcPath, destPath, { recursive: true });
-      }
+    // 直接全复制 public 目录
+    fs.cpSync(publicSrcDir, publicDestDir, { recursive: true });
+    // 删除 images 目录（运行时生成，不需要打包）
+    const imagesDir = path.join(publicDestDir, 'images');
+    if (fs.existsSync(imagesDir)) {
+      fs.rmSync(imagesDir, { recursive: true, force: true });
     }
     console.log('  ✓ Copied public directory');
   }

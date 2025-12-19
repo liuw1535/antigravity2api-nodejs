@@ -2,11 +2,16 @@
  * 智能内存管理器
  * 采用分级策略，根据内存压力动态调整缓存和对象池
  * 目标：在保证性能的前提下，将内存稳定在 20MB 左右
+ * @module utils/memoryManager
  */
 
 import logger from './logger.js';
+import { MEMORY_THRESHOLDS, GC_COOLDOWN } from '../constants/index.js';
 
-// 内存压力级别
+/**
+ * 内存压力级别枚举
+ * @enum {string}
+ */
 const MemoryPressure = {
   LOW: 'low',       // < 15MB - 正常运行
   MEDIUM: 'medium', // 15-25MB - 轻度清理
@@ -14,13 +19,8 @@ const MemoryPressure = {
   CRITICAL: 'critical' // > 35MB - 紧急清理
 };
 
-// 阈值配置（字节）
-const THRESHOLDS = {
-  LOW: 15 * 1024 * 1024,      // 15MB
-  MEDIUM: 25 * 1024 * 1024,   // 25MB
-  HIGH: 35 * 1024 * 1024,     // 35MB
-  TARGET: 20 * 1024 * 1024    // 20MB 目标
-};
+// 使用导入的常量
+const THRESHOLDS = MEMORY_THRESHOLDS;
 
 // 对象池最大大小配置（根据压力调整）
 const POOL_SIZES = {
@@ -30,12 +30,19 @@ const POOL_SIZES = {
   [MemoryPressure.CRITICAL]: { chunk: 5, toolCall: 3, lineBuffer: 1 }
 };
 
+/**
+ * 内存管理器类
+ */
 class MemoryManager {
   constructor() {
+    /** @type {string} */
     this.currentPressure = MemoryPressure.LOW;
+    /** @type {Set<Function>} */
     this.cleanupCallbacks = new Set();
+    /** @type {number} */
     this.lastGCTime = 0;
-    this.gcCooldown = 10000; // GC 冷却时间 10秒
+    /** @type {number} */
+    this.gcCooldown = GC_COOLDOWN;
     this.checkInterval = null;
     this.isShuttingDown = false;
     

@@ -23,6 +23,8 @@
 - ✅ 隐私模式（自动隐藏敏感信息）
 - ✅ 内存优化（从 8+ 进程减少为 2 个进程，内存占用从 100MB+ 降为 50MB+）
 - ✅ 对象池复用（减少 50%+ 临时对象创建，降低 GC 频率）
+- ✅ 签名透传控制（可配置是否将 thoughtSignature 透传到客户端）
+- ✅ 预编译二进制文件（支持 Windows/Linux/Android，无需 Node.js 环境）
 
 ## 环境要求
 
@@ -74,6 +76,114 @@ npm start
 ```
 
 服务将在 `http://localhost:8045` 启动。
+
+## 二进制文件部署（推荐）
+
+无需安装 Node.js，直接下载预编译的二进制文件即可运行。
+
+### 下载二进制文件
+
+从 [GitHub Releases](https://github.com/ZhaoShanGeng/antigravity2api-nodejs/releases) 下载对应平台的二进制文件：
+
+| 平台 | 文件名 |
+|------|--------|
+| Windows x64 | `antigravity2api-win-x64.exe` |
+| Linux x64 | `antigravity2api-linux-x64` |
+| Linux ARM64 | `antigravity2api-linux-arm64` |
+| macOS x64 | `antigravity2api-macos-x64` |
+| macOS ARM64 | `antigravity2api-macos-arm64` |
+
+### 准备配置文件
+
+将以下文件放在二进制文件同目录下：
+
+```
+├── antigravity2api-win-x64.exe  # 二进制文件
+├── .env                          # 环境变量配置（必需）
+├── config.json                   # 基础配置（必需）
+├── public/                       # 静态文件目录（必需）
+│   ├── index.html
+│   ├── style.css
+│   ├── assets/
+│   │   └── bg.jpg
+│   └── js/
+│       ├── auth.js
+│       ├── config.js
+│       ├── main.js
+│       ├── quota.js
+│       ├── tokens.js
+│       ├── ui.js
+│       └── utils.js
+└── data/                         # 数据目录（自动创建）
+    └── accounts.json
+```
+
+### 配置环境变量
+
+创建 `.env` 文件：
+
+```env
+API_KEY=sk-your-api-key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+JWT_SECRET=your-jwt-secret-key-change-this-in-production
+# IMAGE_BASE_URL=http://your-domain.com
+# PROXY=http://127.0.0.1:7890
+```
+
+### 运行
+
+**Windows**：
+```bash
+# 直接双击运行，或在命令行执行
+antigravity2api-win-x64.exe
+```
+
+**Linux/macOS**：
+```bash
+# 添加执行权限
+chmod +x antigravity2api-linux-x64
+
+# 运行
+./antigravity2api-linux-x64
+```
+
+### 二进制部署说明
+
+- **无需 Node.js**：二进制文件已包含 Node.js 运行时
+- **配置文件**：`.env` 和 `config.json` 必须与二进制文件在同一目录
+- **静态文件**：`public/` 目录必须与二进制文件在同一目录
+- **数据持久化**：`data/` 目录会自动创建，用于存储 Token 数据
+- **跨平台**：支持 Windows、Linux、macOS（x64 和 ARM64）
+
+### 作为系统服务运行（Linux）
+
+创建 systemd 服务文件 `/etc/systemd/system/antigravity2api.service`：
+
+```ini
+[Unit]
+Description=Antigravity2API Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/antigravity2api
+ExecStart=/opt/antigravity2api/antigravity2api-linux-x64
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启动服务：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable antigravity2api
+sudo systemctl start antigravity2api
+```
 
 ## Docker 部署
 
@@ -365,7 +475,9 @@ curl http://localhost:8045/v1/chat/completions \
   "other": {
     "timeout": 300000,         // 请求超时时间（毫秒）
     "skipProjectIdFetch": false,// 跳过 ProjectId 获取，直接随机生成（仅 Pro 账号有效）
-    "useNativeAxios": false    // 使用原生 axios 而非 AntigravityRequester
+    "useNativeAxios": false,   // 使用原生 axios 而非 AntigravityRequester
+    "useContextSystemPrompt": false, // 是否将请求中的 system 消息合并到 SystemInstruction
+    "passSignatureToClient": false   // 是否将 thoughtSignature 透传到客户端
   }
 }
 ```
@@ -375,8 +487,8 @@ curl http://localhost:8045/v1/chat/completions \
 | 策略 | 说明 |
 |------|------|
 | `round_robin` | 均衡负载：每次请求后切换到下一个 Token |
-| `quota_exhausted` | 额度耗尽才切换：持续使用当前 Token 直到额度用完 |
-| `request_count` | 自定义次数：每个 Token 使用指定次数后切换 |
+| `quota_exhausted` | 额度耗尽才切换：持续使用当前 Token 直到额度用完（高性能优化） |
+| `request_count` | 自定义次数：每个 Token 使用指定次数后切换（默认策略） |
 
 ### 2. .env（敏感配置）
 
@@ -425,10 +537,12 @@ npm run login
 │   └── refresh-tokens.js   # Token 刷新脚本
 ├── src/
 │   ├── api/
-│   │   └── client.js       # API 调用逻辑（含模型列表缓存）
+│   │   ├── client.js       # API 调用逻辑（含模型列表缓存）
+│   │   └── stream_parser.js # 流式响应解析（对象池优化）
 │   ├── auth/
 │   │   ├── jwt.js          # JWT 认证
 │   │   ├── token_manager.js # Token 管理（含轮询策略）
+│   │   ├── token_store.js  # Token 文件存储（异步读写）
 │   │   └── quota_manager.js # 额度缓存管理
 │   ├── routes/
 │   │   ├── admin.js        # 管理接口路由
@@ -441,6 +555,7 @@ npm run login
 │   │   ├── config.js       # 配置加载
 │   │   └── init-env.js     # 环境变量初始化
 │   ├── constants/
+│   │   ├── index.js        # 应用常量定义
 │   │   └── oauth.js        # OAuth 常量
 │   ├── server/
 │   │   └── index.js        # 主服务器（含内存管理和心跳）
@@ -448,10 +563,19 @@ npm run login
 │   │   ├── configReloader.js # 配置热重载
 │   │   ├── deepMerge.js    # 深度合并工具
 │   │   ├── envParser.js    # 环境变量解析
+│   │   ├── errors.js       # 统一错误处理
 │   │   ├── idGenerator.js  # ID 生成器
 │   │   ├── imageStorage.js # 图片存储
 │   │   ├── logger.js       # 日志模块
-│   │   └── utils.js        # 工具函数
+│   │   ├── memoryManager.js # 智能内存管理
+│   │   ├── openai_generation.js # 生成配置
+│   │   ├── openai_mapping.js    # 请求体构建
+│   │   ├── openai_messages.js   # 消息格式转换
+│   │   ├── openai_signatures.js # 签名常量
+│   │   ├── openai_system.js     # 系统指令提取
+│   │   ├── openai_tools.js      # 工具格式转换
+│   │   ├── paths.js        # 路径工具（支持 pkg 打包）
+│   │   └── utils.js        # 工具函数（重导出）
 │   └── AntigravityRequester.js # TLS 指纹请求器封装
 ├── test/
 │   ├── test-request.js     # 请求测试

@@ -1,9 +1,19 @@
 import tokenManager from '../auth/token_manager.js';
 import config from '../config/config.js';
-import { generateToolCallId } from '../utils/idGenerator.js';
 import AntigravityRequester from '../AntigravityRequester.js';
 import { saveBase64Image } from '../utils/imageStorage.js';
 import logger from '../utils/logger.js';
+import memoryManager, { MemoryPressure } from '../utils/memoryManager.js';
+import { buildAxiosRequestConfig } from '../utils/httpClient.js';
+import { MODEL_LIST_CACHE_TTL } from '../constants/index.js';
+import { createApiError, UpstreamApiError } from '../utils/errors.js';
+import {
+  getLineBuffer,
+  releaseLineBuffer,
+  parseAndEmitStreamChunk,
+  convertToToolCall,
+  registerStreamMemoryCleanup
+} from './stream_parser.js';
 import memoryManager, { MemoryPressure, registerMemoryPoolCleanup } from '../utils/memoryManager.js';
 import { buildAxiosRequestConfig, httpRequest, httpStreamRequest } from '../utils/httpClient.js';
 import { setReasoningSignature, setToolSignature } from '../utils/thoughtSignatureCache.js';
@@ -16,7 +26,7 @@ let useAxios = false;
 // ==================== 模型列表缓存（智能管理） ====================
 // 缓存过期时间根据内存压力动态调整
 const getModelCacheTTL = () => {
-  const baseTTL = config.cache?.modelListTTL || 60 * 60 * 1000;
+  const baseTTL = config.cache?.modelListTTL || MODEL_LIST_CACHE_TTL;
   const pressure = memoryManager.currentPressure;
   // 高压力时缩短缓存时间
   if (pressure === MemoryPressure.CRITICAL) return Math.min(baseTTL, 5 * 60 * 1000);
@@ -71,75 +81,10 @@ if (config.useNativeAxios === true) {
   }
 }
 
-// ==================== 零拷贝优化 ====================
-
-// 预编译的常量（避免重复创建字符串）
-const DATA_PREFIX = 'data: ';
-const DATA_PREFIX_LEN = DATA_PREFIX.length;
-
-// 高效的行分割器（零拷贝，避免 split 创建新数组）
-// 使用对象池复用 LineBuffer 实例
-class LineBuffer {
-  constructor() {
-    this.buffer = '';
-    this.lines = [];
-  }
-  
-  // 追加数据并返回完整的行
-  append(chunk) {
-    this.buffer += chunk;
-    this.lines.length = 0; // 重用数组
-    
-    let start = 0;
-    let end;
-    while ((end = this.buffer.indexOf('\n', start)) !== -1) {
-      this.lines.push(this.buffer.slice(start, end));
-      start = end + 1;
-    }
-    
-    // 保留未完成的部分
-    this.buffer = start < this.buffer.length ? this.buffer.slice(start) : '';
-    return this.lines;
-  }
-  
-  // 清空缓冲区（用于归还到池之前）
-  clear() {
-    this.buffer = '';
-    this.lines.length = 0;
-  }
-}
-
-// LineBuffer 对象池
-const lineBufferPool = [];
-const getLineBuffer = () => {
-  const buffer = lineBufferPool.pop();
-  if (buffer) {
-    buffer.clear();
-    return buffer;
-  }
-  return new LineBuffer();
-};
-const releaseLineBuffer = (buffer) => {
-  const maxSize = memoryManager.getPoolSizes().lineBuffer;
-  if (lineBufferPool.length < maxSize) {
-    buffer.clear();
-    lineBufferPool.push(buffer);
-  }
-};
-
-// 对象池：复用 toolCall 对象
-const toolCallPool = [];
-const getToolCallObject = () => toolCallPool.pop() || { id: '', type: 'function', function: { name: '', arguments: '' } };
-const releaseToolCallObject = (obj) => {
-  const maxSize = memoryManager.getPoolSizes().toolCall;
-  if (toolCallPool.length < maxSize) toolCallPool.push(obj);
-};
-
-// 注册内存清理回调
+// 注册对象池与模型缓存的内存清理回调
 function registerMemoryCleanup() {
-  // 使用通用池清理工具，避免重复 while-pop 逻辑
-  registerMemoryPoolCleanup(toolCallPool, () => memoryManager.getPoolSizes().toolCall);
-  registerMemoryPoolCleanup(lineBufferPool, () => memoryManager.getPoolSizes().lineBuffer);
+  // 由流式解析模块管理自身对象池大小
+  registerStreamMemoryCleanup();
 
   memoryManager.registerCleanup((pressure) => {
     // 高压力或紧急时清理模型缓存
@@ -153,7 +98,6 @@ function registerMemoryCleanup() {
       }
     }
     
-    // 紧急时强制清理模型缓存
     if (pressure === MemoryPressure.CRITICAL && modelListCache) {
       modelListCache = null;
       modelListCacheTime = 0;
@@ -188,14 +132,6 @@ function buildRequesterConfig(headers, body = null) {
   return reqConfig;
 }
 
-// 统一构造上游 API 错误对象，方便服务器层识别并透传
-function createApiError(message, status, rawBody) {
-  const err = new Error(message);
-  err.status = status;
-  err.rawBody = rawBody;
-  err.isUpstreamApiError = true;
-  return err;
-}
 
 // 统一错误处理
 async function handleApiError(error, token) {
@@ -225,88 +161,6 @@ async function handleApiError(error, token) {
   throw createApiError(`API请求失败 (${status}): ${errorBody}`, status, errorBody);
 }
 
-// 转换 functionCall 为 OpenAI 格式（使用对象池）
-// 会尝试将安全工具名还原为原始工具名
-function convertToToolCall(functionCall, sessionId, model) {
-  const toolCall = getToolCallObject();
-  toolCall.id = functionCall.id || generateToolCallId();
-  let name = functionCall.name;
-  if (sessionId && model) {
-    const original = getOriginalToolName(sessionId, model, functionCall.name);
-    if (original) name = original;
-  }
-  toolCall.function.name = name;
-  toolCall.function.arguments = JSON.stringify(functionCall.args);
-  return toolCall;
-}
-
-// 解析并发送流式响应片段（会修改 state 并触发 callback）
-// 支持 DeepSeek 格式：思维链内容通过 reasoning_content 字段输出
-// 同时透传 thoughtSignature，方便客户端后续复用
-function parseAndEmitStreamChunk(line, state, callback) {
-  if (!line.startsWith(DATA_PREFIX)) return;
-  
-  try {
-    const data = JSON.parse(line.slice(DATA_PREFIX_LEN));
-    //console.log(JSON.stringify(data));
-    const parts = data.response?.candidates?.[0]?.content?.parts;
-    
-    if (parts) {
-      for (const part of parts) {
-        if (part.thought === true) {
-          // 思维链内容 - 使用 DeepSeek 格式的 reasoning_content
-          // 缓存最新的签名，方便后续片段缺省时复用，并写入全局缓存
-          if (part.thoughtSignature) {
-            state.reasoningSignature = part.thoughtSignature;
-            if (state.sessionId && state.model) {
-              setReasoningSignature(state.sessionId, state.model, part.thoughtSignature);
-            }
-          }
-          callback({
-            type: 'reasoning',
-            reasoning_content: part.text || '',
-            thoughtSignature: part.thoughtSignature || state.reasoningSignature || null
-          });
-        } else if (part.text !== undefined) {
-          // 普通文本内容
-          callback({ type: 'text', content: part.text });
-        } else if (part.functionCall) {
-          // 工具调用，透传工具签名，并写入全局缓存
-          const toolCall = convertToToolCall(part.functionCall, state.sessionId, state.model);
-          if (part.thoughtSignature) {
-            toolCall.thoughtSignature = part.thoughtSignature;
-            if (state.sessionId && state.model) {
-              setToolSignature(state.sessionId, state.model, part.thoughtSignature);
-            }
-          }
-          state.toolCalls.push(toolCall);
-        }
-      }
-    }
-    
-    // 响应结束时发送工具调用和使用统计
-    if (data.response?.candidates?.[0]?.finishReason) {
-      if (state.toolCalls.length > 0) {
-        callback({ type: 'tool_calls', tool_calls: state.toolCalls });
-        state.toolCalls = [];
-      }
-      // 提取 token 使用统计
-      const usage = data.response?.usageMetadata;
-      if (usage) {
-        callback({
-          type: 'usage',
-          usage: {
-            prompt_tokens: usage.promptTokenCount || 0,
-            completion_tokens: usage.candidatesTokenCount || 0,
-            total_tokens: usage.totalTokenCount || 0
-          }
-        });
-      }
-    }
-  } catch (e) {
-    // 忽略 JSON 解析错误
-  }
-}
 
 // ==================== 导出函数 ====================
 

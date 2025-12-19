@@ -7,7 +7,7 @@
     "memoryThreshold": 25
   },
   "rotation": {
-    "strategy": "round_robin",
+    "strategy": "request_count",
     "requestCount": 50
   },
   "api": {
@@ -32,6 +32,7 @@
     "retryTimes": 3,
     "skipProjectIdFetch": false,
     "useNativeAxios": false,
-    "useContextSystemPrompt": false
+    "useContextSystemPrompt": false,
+    "passSignatureToClient": false
   }
 }

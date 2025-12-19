@@ -26,7 +26,7 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* 固定背景图片 - 使用静态风景图（清晰无模糊） */
+/* 固定背景图片 - 使用本地图片（快速加载） */
 body::before {
     content: '';
     position: fixed;
@@ -34,7 +34,8 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80');
+    background-color: var(--bg);
+    background-image: url('assets/bg.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -88,7 +89,7 @@ html {
     font-size: var(--font-size-base);
 }
 body {
-    font-family: 'Ubuntu Mono', 'MiSans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Ubuntu Mono', 'MiSans';
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
@@ -100,6 +101,11 @@ body {
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-weight: 400;
+}
+
+/* 字体加载完成后应用 */
+.fonts-loaded body {
+    font-family: 'Ubuntu Mono', 'MiSans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* 确保所有元素继承字体 */
@@ -161,16 +167,16 @@ label {
     color: var(--text); 
     font-size: 0.875rem; 
 }
-input, select, textarea { 
-    width: 100%; 
-    min-height: 40px; 
-    padding: 0.5rem 0.75rem 0.5rem 0.5rem !important; 
-    border: 1.5px solid var(--border); 
-    border-radius: 0.5rem; 
-    font-size: 0.875rem; 
-    background: var(--card); 
-    color: var(--text); 
-    transition: all 0.2s; 
+input, select, textarea {
+    width: 100%;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    border: 1.5px solid var(--border);
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background: var(--card);
+    color: var(--text);
+    transition: all 0.2s;
 }
 input:focus, select:focus, textarea:focus {
     outline: none;
@@ -493,7 +499,7 @@ button.loading::after {
 .inline-edit-input {
     flex: 1;
     min-height: 24px;
-    padding: 0.125rem 0.375rem 0.125rem 0.5rem;
+    padding: 0.125rem 0.375rem;
     font-size: 0.75rem;
     border: 1px solid var(--primary);
     border-radius: 0.25rem;
@@ -607,13 +613,13 @@ button.loading::after {
 .form-group.compact input,
 .form-group.compact select {
     min-height: 36px;
-    padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+    padding: 0.375rem 0.5rem;
     font-size: 0.8rem;
 }
 .form-group.compact textarea {
     min-height: 60px;
     max-height: 300px;
-    padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+    padding: 0.375rem 0.5rem;
     font-size: 0.8rem;
     resize: vertical;
     height: auto;

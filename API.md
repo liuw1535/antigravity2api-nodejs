@@ -162,7 +162,7 @@ curl http://localhost:8045/v1/chat/completions \
 | `top_p` | number | ❌ | Top P 参数，默认 1 |
 | `top_k` | number | ❌ | Top K 参数，默认 50 |
 | `max_tokens` | number | ❌ | 最大 token 数，默认 32000 |
-| `thinking_budget` | number | ❌ | 思考预算（仅对思考模型生效），可为 0 或 1024-32000，默认 16000（0 表示关闭思考预算限制） |
+| `thinking_budget` | number | ❌ | 思考预算（仅对思考模型生效），可为 0 或 1024-32000，默认 1024（0 表示关闭思考预算限制） |
 | `reasoning_effort` | string | ❌ | 思维链强度（OpenAI 格式），可选值：`low`(1024)、`medium`(16000)、`high`(32000) |
 | `tools` | array | ❌ | 工具列表（Function Calling） |
 
@@ -246,8 +246,8 @@ curl http://localhost:8045/v1/chat/completions \
 
 | reasoning_effort | thinking_budget | 说明 |
 |-----------------|-----------------|------|
-| `low` | 1024 | 快速响应，适合简单问题 |
-| `medium` | 16000 | 平衡模式（默认） |
+| `low` | 1024 | 快速响应，适合简单问题（默认） |
+| `medium` | 16000 | 平衡模式 |
 | `high` | 32000 | 深度思考，适合复杂推理 |
 
 ### 使用 thinking_budget（直接数值）
@@ -505,6 +505,53 @@ for await (const chunk of stream) {
 }
 ```
 
+## 配置选项
+
+### passSignatureToClient
+
+控制是否将 `thoughtSignature` 透传到客户端响应中。
+
+在 `config.json` 中配置：
+
+```json
+{
+  "other": {
+    "passSignatureToClient": false
+  }
+}
+```
+
+- `false`（默认）：不透传签名，响应中不包含 `thoughtSignature` 字段
+- `true`：透传签名，响应中包含 `thoughtSignature` 字段
+
+**启用透传后的响应示例**：
+
+```json
+{
+  "choices": [{
+    "delta": {
+      "reasoning_content": "让我思考...",
+      "thoughtSignature": "RXFRRENrZ0lDaEFD..."
+    }
+  }]
+}
+```
+
+### useContextSystemPrompt
+
+控制是否将请求中的 system 消息合并到 SystemInstruction。
+
+```json
+{
+  "other": {
+    "useContextSystemPrompt": false
+  }
+}
+```
+
+- `false`（默认）：仅使用全局 `SYSTEM_INSTRUCTION` 环境变量
+- `true`：将请求开头连续的 system 消息与全局配置合并
+
 ## 注意事项
 
 1. 所有 `/v1/*` 请求必须携带有效的 API Key
@@ -515,3 +562,4 @@ for await (const chunk of stream) {
 6. 图片生成仅支持 `gemini-3-pro-image` 模型
 7. 模型列表会缓存 1 小时，可通过配置调整
 8. 思维链内容通过 `reasoning_content` 字段输出（兼容 DeepSeek 格式）
+9. 默认轮询策略为 `request_count`，每 50 次请求切换 Token

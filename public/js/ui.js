@@ -52,17 +52,45 @@ function hideLoading() {
     if (overlay) overlay.remove();
 }
 
-function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
+function switchTab(tab, saveState = true) {
+    // 更新html元素的class以防止闪烁
+    if (tab === 'settings') {
+        document.documentElement.classList.add('tab-settings');
+    } else {
+        document.documentElement.classList.remove('tab-settings');
+    }
     
+    // 移除所有tab的active状态
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    
+    // 找到对应的tab按钮并激活
+    const targetTab = document.querySelector(`.tab[data-tab="${tab}"]`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    // 隐藏所有页面
     document.getElementById('tokensPage').classList.add('hidden');
     document.getElementById('settingsPage').classList.add('hidden');
     
+    // 显示对应页面
     if (tab === 'tokens') {
         document.getElementById('tokensPage').classList.remove('hidden');
     } else if (tab === 'settings') {
         document.getElementById('settingsPage').classList.remove('hidden');
         loadConfig();
+    }
+    
+    // 保存当前Tab状态到localStorage
+    if (saveState) {
+        localStorage.setItem('currentTab', tab);
+    }
+}
+
+// 恢复Tab状态
+function restoreTabState() {
+    const savedTab = localStorage.getItem('currentTab');
+    if (savedTab && (savedTab === 'tokens' || savedTab === 'settings')) {
+        switchTab(savedTab, false);
     }
 }

@@ -7,8 +7,12 @@ initSensitiveInfo();
 // 如果已登录，显示主内容
 if (authToken) {
     showMainContent();
+    restoreTabState(); // 恢复Tab状态
     loadTokens();
-    loadConfig();
+    // 只有在设置页面时才加载配置
+    if (localStorage.getItem('currentTab') === 'settings') {
+        loadConfig();
+    }
 }
 
 // 登录表单提交

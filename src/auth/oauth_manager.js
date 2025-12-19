@@ -82,7 +82,7 @@ class OAuthManager {
     if (config.skipProjectIdFetch) {
       const projectId = generateProjectId();
       log.info('已跳过API验证，使用随机生成的projectId: ' + projectId);
-      return { projectId, hasQuota: false };
+      return { projectId, hasQuota: true };
     }
 
     // 尝试从API获取projectId

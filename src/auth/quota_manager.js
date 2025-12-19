@@ -1,30 +1,20 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { log } from '../utils/logger.js';
 import memoryManager, { MemoryPressure } from '../utils/memoryManager.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 获取数据目录（支持 pkg 打包环境）
-function getDataDir() {
-  // 检测是否在 pkg 打包环境中运行
-  if (process.pkg) {
-    // pkg 环境：使用可执行文件所在目录的 data 子目录
-    const execDir = path.dirname(process.execPath);
-    return path.join(execDir, 'data');
-  }
-  // 普通环境：使用项目根目录的 data 子目录
-  return path.join(__dirname, '..', '..', 'data');
-}
+import { getDataDir } from '../utils/paths.js';
+import { QUOTA_CACHE_TTL, QUOTA_CLEANUP_INTERVAL } from '../constants/index.js';
 
 class QuotaManager {
+  /**
+   * @param {string} filePath - 额度数据文件路径
+   */
   constructor(filePath = path.join(getDataDir(), 'quotas.json')) {
     this.filePath = filePath;
+    /** @type {Map<string, {lastUpdated: number, models: Object}>} */
     this.cache = new Map();
-    this.CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
-    this.CLEANUP_INTERVAL = 60 * 60 * 1000; // 1小时清理一次
+    this.CACHE_TTL = QUOTA_CACHE_TTL;
+    this.CLEANUP_INTERVAL = QUOTA_CLEANUP_INTERVAL;
     this.cleanupTimer = null;
     this.ensureFileExists();
     this.loadFromFile();

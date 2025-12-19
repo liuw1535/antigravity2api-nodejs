@@ -1,65 +1,26 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import log from '../utils/logger.js';
 import { deepMerge } from '../utils/deepMerge.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 检测是否在 pkg 打包环境中运行
-const isPkg = typeof process.pkg !== 'undefined';
-
-// 获取配置文件路径
-// pkg 环境下使用可执行文件所在目录或当前工作目录
-function getConfigPaths() {
-  if (isPkg) {
-    // pkg 环境：优先使用可执行文件旁边的配置文件
-    const exeDir = path.dirname(process.execPath);
-    const cwdDir = process.cwd();
-    
-    // 查找 .env 文件
-    let envPath = path.join(exeDir, '.env');
-    if (!fs.existsSync(envPath)) {
-      const cwdEnvPath = path.join(cwdDir, '.env');
-      if (fs.existsSync(cwdEnvPath)) {
-        envPath = cwdEnvPath;
-      }
-    }
-    
-    // 查找 config.json 文件
-    let configJsonPath = path.join(exeDir, 'config.json');
-    if (!fs.existsSync(configJsonPath)) {
-      const cwdConfigPath = path.join(cwdDir, 'config.json');
-      if (fs.existsSync(cwdConfigPath)) {
-        configJsonPath = cwdConfigPath;
-      }
-    }
-    
-    // 查找 .env.example 文件
-    let examplePath = path.join(exeDir, '.env.example');
-    if (!fs.existsSync(examplePath)) {
-      const cwdExamplePath = path.join(cwdDir, '.env.example');
-      if (fs.existsSync(cwdExamplePath)) {
-        examplePath = cwdExamplePath;
-      }
-    }
-    
-    return { envPath, configJsonPath, examplePath };
-  }
-  
-  // 开发环境
-  return {
-    envPath: path.join(__dirname, '../../.env'),
-    configJsonPath: path.join(__dirname, '../../config.json'),
-    examplePath: path.join(__dirname, '../../.env.example')
-  };
-}
+import { getConfigPaths } from '../utils/paths.js';
+import {
+  DEFAULT_SERVER_PORT,
+  DEFAULT_SERVER_HOST,
+  DEFAULT_HEARTBEAT_INTERVAL,
+  DEFAULT_TIMEOUT,
+  DEFAULT_RETRY_TIMES,
+  DEFAULT_MAX_REQUEST_SIZE,
+  DEFAULT_MAX_IMAGES,
+  MODEL_LIST_CACHE_TTL,
+  DEFAULT_GENERATION_PARAMS,
+  DEFAULT_ADMIN_USERNAME,
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_JWT_SECRET
+} from '../constants/index.js';
 
 const { envPath, configJsonPath, examplePath } = getConfigPaths();
 
-// 确保 .env 存在
+// 确保 .env 存在（如果缺失则从 .env.example 复制一份）
 if (!fs.existsSync(envPath)) {
   if (fs.existsSync(examplePath)) {
     fs.copyFileSync(examplePath, envPath);
@@ -100,24 +61,26 @@ export function getProxyConfig() {
 
 /**
  * 从 JSON 和环境变量构建配置对象
+ * @param {Object} jsonConfig - JSON 配置对象
+ * @returns {Object} 完整配置对象
  */
 export function buildConfig(jsonConfig) {
   return {
     server: {
-      port: jsonConfig.server?.port || 8045,
-      host: jsonConfig.server?.host || '0.0.0.0',
-      heartbeatInterval: jsonConfig.server?.heartbeatInterval || 15000,
+      port: jsonConfig.server?.port || DEFAULT_SERVER_PORT,
+      host: jsonConfig.server?.host || DEFAULT_SERVER_HOST,
+      heartbeatInterval: jsonConfig.server?.heartbeatInterval || DEFAULT_HEARTBEAT_INTERVAL,
       memoryThreshold: jsonConfig.server?.memoryThreshold || 500
     },
     cache: {
-      modelListTTL: jsonConfig.cache?.modelListTTL || 60 * 60 * 1000
+      modelListTTL: jsonConfig.cache?.modelListTTL || MODEL_LIST_CACHE_TTL
     },
     rotation: {
       strategy: jsonConfig.rotation?.strategy || 'round_robin',
       requestCount: jsonConfig.rotation?.requestCount || 10
     },
     imageBaseUrl: process.env.IMAGE_BASE_URL || null,
-    maxImages: jsonConfig.other?.maxImages || 10,
+    maxImages: jsonConfig.other?.maxImages || DEFAULT_MAX_IMAGES,
     api: {
       url: jsonConfig.api?.url || 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:streamGenerateContent?alt=sse',
       modelsUrl: jsonConfig.api?.modelsUrl || 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels',
@@ -126,28 +89,29 @@ export function buildConfig(jsonConfig) {
       userAgent: jsonConfig.api?.userAgent || 'antigravity/1.11.3 windows/amd64'
     },
     defaults: {
-      temperature: jsonConfig.defaults?.temperature || 1,
-      top_p: jsonConfig.defaults?.topP || 0.85,
-      top_k: jsonConfig.defaults?.topK || 50,
-      max_tokens: jsonConfig.defaults?.maxTokens || 32000,
-      thinking_budget: jsonConfig.defaults?.thinkingBudget ?? 1024
+      temperature: jsonConfig.defaults?.temperature ?? DEFAULT_GENERATION_PARAMS.temperature,
+      top_p: jsonConfig.defaults?.topP ?? DEFAULT_GENERATION_PARAMS.top_p,
+      top_k: jsonConfig.defaults?.topK ?? DEFAULT_GENERATION_PARAMS.top_k,
+      max_tokens: jsonConfig.defaults?.maxTokens ?? DEFAULT_GENERATION_PARAMS.max_tokens,
+      thinking_budget: jsonConfig.defaults?.thinkingBudget ?? DEFAULT_GENERATION_PARAMS.thinking_budget
     },
     security: {
-      maxRequestSize: jsonConfig.server?.maxRequestSize || '50mb',
+      maxRequestSize: jsonConfig.server?.maxRequestSize || DEFAULT_MAX_REQUEST_SIZE,
       apiKey: process.env.API_KEY || null
     },
     admin: {
-      username: process.env.ADMIN_USERNAME || 'admin',
-      password: process.env.ADMIN_PASSWORD || 'admin123',
-      jwtSecret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production'
+      username: process.env.ADMIN_USERNAME || DEFAULT_ADMIN_USERNAME,
+      password: process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD,
+      jwtSecret: process.env.JWT_SECRET || DEFAULT_JWT_SECRET
     },
     useNativeAxios: jsonConfig.other?.useNativeAxios !== false,
-    timeout: jsonConfig.other?.timeout || 300000,
-    retryTimes: Number.isFinite(jsonConfig.other?.retryTimes) ? jsonConfig.other.retryTimes : 3,
+    timeout: jsonConfig.other?.timeout || DEFAULT_TIMEOUT,
+    retryTimes: Number.isFinite(jsonConfig.other?.retryTimes) ? jsonConfig.other.retryTimes : DEFAULT_RETRY_TIMES,
     proxy: getProxyConfig(),
     systemInstruction: process.env.SYSTEM_INSTRUCTION || '',
     skipProjectIdFetch: jsonConfig.other?.skipProjectIdFetch === true,
-    useContextSystemPrompt: jsonConfig.other?.useContextSystemPrompt === true
+    useContextSystemPrompt: jsonConfig.other?.useContextSystemPrompt === true,
+    passSignatureToClient: jsonConfig.other?.passSignatureToClient === true
   };
 }
 
