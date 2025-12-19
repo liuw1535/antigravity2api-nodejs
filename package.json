@@ -47,10 +47,7 @@
       "scripts/**/*.js"
     ],
     "assets": [
-      "public/*.html",
-      "public/*.css",
-      "public/js/**/*",
-      "public/assets/**/*",
+      "public/**/*",
       "src/bin/**/*",
       ".env.example",
       "config.json"

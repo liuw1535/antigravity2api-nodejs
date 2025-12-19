@@ -4,61 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Token 管理</title>
-    <!-- 防止页面闪烁：在渲染前根据登录状态和Tab状态设置初始显示 -->
+    <!-- 引入 MiSans 字体 -->
+    <link rel="stylesheet" href="https://font.sec.miui.com/font/css?family=MiSans:100,200,300,400,450,500,600,650,700,900:Chinese_Simplify,Latin&display=swap">
+    <!-- 引入 Ubuntu Mono 等宽字体 -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&display=swap">
+    <link rel="stylesheet" href="style.css">
     <script>
-        (function() {
-            var isLoggedIn = localStorage.getItem('authToken');
-            var currentTab = localStorage.getItem('currentTab') || 'tokens';
-            var classes = ['auth-ready'];
-            if (isLoggedIn) classes.push('logged-in');
-            if (currentTab === 'settings') classes.push('tab-settings');
-            document.documentElement.className = classes.join(' ');
-            // 检测字体加载
-            if ('fonts' in document) {
-                document.fonts.ready.then(function() {
-                    document.documentElement.classList.add('fonts-loaded');
-                });
-            } else {
-                // 后备方案：延迟添加
-                setTimeout(function() {
-                    document.documentElement.classList.add('fonts-loaded');
-                }, 1000);
-            }
-        })();
+        // 页面加载前检查登录状态，避免闪现
+        if (localStorage.getItem('authToken')) {
+            document.documentElement.classList.add('logged-in');
+        }
     </script>
     <style>
-/* 防止闪烁的关键样式 - 来自 binary-build */
-html:not(.auth-ready) #loginForm,
-html:not(.auth-ready) #mainContent { visibility: hidden; }
-/* 登录状态显示控制 - 合并两个分支 *
-.logged-in #loginForm { display: none !important; }
-.logged-in #mainContent { display: flex !important; }
-html:not(.logged-in) #mainContent { display: none !important; }
-/* Tab状态管理 - 来自 binary-build */
-html.tab-settings #tokensPage { display: none !important; }
-html.tab-settings #settingsPage { display: block !important; }
-html.tab-settings .tab[data-tab="tokens"] { 
-    background: transparent !important;
-    color: var(--text-light, #888) !important; 
-}
-html.tab-settings .tab[data-tab="settings"] { 
-    background: var(--primary, #4f46e5) !important; 
-    color: white !important; 
-}
+        .logged-in #loginForm { display: none !important; }
+        .logged-in #mainContent { display: flex !important; }
     </style>
-    <!-- 主样式表 - 优先加载 -->
-    <link rel="stylesheet" href="style.css">
-    <!-- 预连接字体服务器 -->
-    <link rel="preconnect" href="https://font.sec.miui.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- 字体异步加载 - 不阻塞渲染 -->
-    <link rel="stylesheet" href="https://font.sec.miui.com/font/css?family=MiSans:400,500,600,700:Chinese_Simplify,Latin&display=swap" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&display=swap" media="print" onload="this.media='all'">
-    <noscript>
-        <link rel="stylesheet" href="https://font.sec.miui.com/font/css?family=MiSans:400,500,600,700:Chinese_Simplify,Latin&display=swap">
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&display=swap">
-    </noscript>
 </head>
 <body>
     <div class="container">
@@ -82,10 +42,11 @@ html.tab-settings .tab[data-tab="settings"] {
         <div id="mainContent" class="main-content hidden">
             <div class="header">
             <div class="tabs">
-                <button class="tab active" data-tab="tokens" onclick="switchTab('tokens')">🎯 Token</button>
-                <button class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ 设置</button>
+                <button class="tab active" onclick="switchTab('tokens')">🎯 Token</button>
+                <button class="tab" onclick="switchTab('settings')">⚙️ 设置</button>
             </div>
                 <div class="header-right">
+                    <span class="server-info" id="serverInfo"></span>
                     <button onclick="logout()">🚪 退出</button>
                 </div>
             </div>
@@ -214,13 +175,6 @@ html.tab-settings .tab[data-tab="settings"] {
                                             <span class="slider"></span>
                                         </label>
                                     </div>
-                                    <div class="form-group compact switch-group">
-                                        <label>透传签名 <span class="help-tip" data-tooltip="将响应中的thoughtSignature透传到客户端">?</span></label>
-                                        <label class="switch">
-                                            <input type="checkbox" name="PASS_SIGNATURE_TO_CLIENT">
-                                            <span class="slider"></span>
-                                        </label>
-                                    </div>
                                 </div>
                                 <div class="form-group compact">
                                     <label>系统提示词</label>
@@ -290,12 +244,12 @@ html.tab-settings .tab[data-tab="settings"] {
     </div>
 
     <!-- 按依赖顺序加载模块 -->
-    <script src="js/utils.js" defer></script>
-    <script src="js/ui.js" defer></script>
-    <script src="js/auth.js" defer></script>
-    <script src="js/quota.js" defer></script>
-    <script src="js/tokens.js" defer></script>
-    <script src="js/config.js" defer></script>
-    <script src="js/main.js" defer></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/quota.js"></script>
+    <script src="js/tokens.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
