@@ -117,8 +117,8 @@ function renderTokens(tokens) {
         return `
         <div class="token-card ${!token.enable ? 'disabled' : ''} ${isExpired ? 'expired' : ''} ${isRefreshing ? 'refreshing' : ''} ${skipAnimation ? 'no-animation' : ''}" id="card-${escapeHtml(cardId)}">
             <div class="token-header">
-                <span class="status ${token.enable ? 'enabled' : 'disabled'}">
-                    ${token.enable ? '✅ 启用' : '❌ 禁用'}
+                <span class="status ${token.enable ? 'enabled' : 'disabled'}" ${!token.enable && token.disableReason ? `title="禁用原因: ${escapeHtml(token.disableReason)}"` : ''}>
+                    ${token.enable ? '✅ 启用' : `❌ ${escapeHtml(token.disableReason) || '已禁用'}`}
                 </span>
                 <div class="token-header-right">
                     <button class="btn-icon" onclick="showTokenDetail('${safeRefreshToken}')" title="编辑全部">✏️</button>

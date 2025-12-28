@@ -131,7 +131,7 @@ class TokenManager {
 
     // 批量禁用失效的 token
     for (const token of tokensToDisable) {
-      this.disableToken(token);
+      this.disableToken(token, '刷新Token失败(403/400)');
     }
 
     const elapsed = Date.now() - startTime;
@@ -291,10 +291,12 @@ class TokenManager {
     });
   }
 
-  disableToken(token) {
-    log.warn(`禁用token ...${token.access_token.slice(-8)}`)
+  disableToken(token, reason = '未知原因') {
+    log.warn(`禁用token ...${token.access_token.slice(-8)}, 原因: ${reason}`)
     token.enable = false;
-    this.saveToFile();
+    token.disableReason = reason;
+    token.disableTime = Date.now();
+    this.saveToFile(token);
     this.tokens = this.tokens.filter(t => t.refresh_token !== token.refresh_token);
     this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
     // tokens 结构发生变化时，重建额度耗尽策略下的可用列表
@@ -366,7 +368,7 @@ class TokenManager {
   /**
    * 准备单个 token（刷新 + 获取 projectId）
    * @param {Object} token - Token 对象
-   * @returns {Promise<'ready'|'skip'|'disable'>} 处理结果
+   * @returns {Promise<{status: 'ready'|'skip'|'disable', reason?: string}>} 处理结果
    * @private
    */
   async _prepareToken(token) {
@@ -385,31 +387,32 @@ class TokenManager {
         const projectId = await this.fetchProjectId(token);
         if (projectId === undefined) {
           log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`);
-          return 'disable';
+          return { status: 'disable', reason: '无资格获取projectId' };
         }
         token.projectId = projectId;
         this.saveToFile(token);
       }
     }
 
-    return 'ready';
+    return { status: 'ready' };
   }
 
   /**
    * 处理 token 准备过程中的错误
    * @param {Error} error - 错误对象
    * @param {Object} token - Token 对象
-   * @returns {'disable'|'skip'} 处理结果
+   * @returns {{status: 'disable'|'skip', reason?: string}} 处理结果
    * @private
    */
   _handleTokenError(error, token) {
     const suffix = token.access_token?.slice(-8) || 'unknown';
     if (error.statusCode === 403 || error.statusCode === 400) {
+      const reason = `Token失效(${error.statusCode})`;
       log.warn(`...${suffix}: Token 已失效或错误，已自动禁用该账号`);
-      return 'disable';
+      return { status: 'disable', reason };
     }
     log.error(`...${suffix} 操作失败:`, error.message);
-    return 'skip';
+    return { status: 'skip' };
   }
 
   /**
@@ -461,8 +464,8 @@ class TokenManager {
 
       try {
         const result = await this._prepareToken(token);
-        if (result === 'disable') {
-          this.disableToken(token);
+        if (result.status === 'disable') {
+          this.disableToken(token, result.reason);
           this._rebuildAvailableQuotaTokens();
           if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
             return null;
@@ -474,9 +477,9 @@ class TokenManager {
         this.currentQuotaIndex = listIndex;
         return token;
       } catch (error) {
-        const action = this._handleTokenError(error, token);
-        if (action === 'disable') {
-          this.disableToken(token);
+        const result = this._handleTokenError(error, token);
+        if (result.status === 'disable') {
+          this.disableToken(token, result.reason);
           this._rebuildAvailableQuotaTokens();
           if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
             return null;
@@ -505,8 +508,8 @@ class TokenManager {
 
       try {
         const result = await this._prepareToken(token);
-        if (result === 'disable') {
-          this.disableToken(token);
+        if (result.status === 'disable') {
+          this.disableToken(token, result.reason);
           if (this.tokens.length === 0) return null;
           continue;
         }
@@ -521,9 +524,9 @@ class TokenManager {
 
         return token;
       } catch (error) {
-        const action = this._handleTokenError(error, token);
-        if (action === 'disable') {
-          this.disableToken(token);
+        const result = this._handleTokenError(error, token);
+        if (result.status === 'disable') {
+          this.disableToken(token, result.reason);
           if (this.tokens.length === 0) return null;
         }
         // skip: 继续尝试下一个 token
@@ -533,10 +536,10 @@ class TokenManager {
     return null;
   }
 
-  disableCurrentToken(token) {
+  disableCurrentToken(token, reason = '未知原因') {
     const found = this.tokens.find(t => t.access_token === token.access_token);
     if (found) {
-      this.disableToken(found);
+      this.disableToken(found, reason);
     }
   }
 
@@ -595,12 +598,18 @@ class TokenManager {
   async updateToken(refreshToken, updates) {
     try {
       const allTokens = await this.store.readAll();
-      
+
       const index = allTokens.findIndex(t => t.refresh_token === refreshToken);
       if (index === -1) {
         return { success: false, message: 'Token不存在' };
       }
-      
+
+      // 如果重新启用 token，清除禁用原因
+      if (updates.enable === true) {
+        updates.disableReason = null;
+        updates.disableTime = null;
+      }
+
       allTokens[index] = { ...allTokens[index], ...updates };
       await this.store.writeAll(allTokens);
       
@@ -648,7 +657,9 @@ class TokenManager {
         enable: token.enable !== false,
         projectId: token.projectId || null,
         email: token.email || null,
-        hasQuota: token.hasQuota !== false
+        hasQuota: token.hasQuota !== false,
+        disableReason: token.disableReason || null,
+        disableTime: token.disableTime || null
       }));
     } catch (error) {
       log.error('获取Token列表失败:', error.message);
