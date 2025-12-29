@@ -78,13 +78,6 @@ class OAuthManager {
    * 资格校验：尝试获取projectId，失败则自动回退到随机projectId
    */
   async validateAndGetProjectId(accessToken) {
-    // 如果配置跳过API验证，直接返回随机projectId
-    if (config.skipProjectIdFetch) {
-      const projectId = generateProjectId();
-      log.info('已跳过API验证，使用随机生成的projectId: ' + projectId);
-      return { projectId, hasQuota: true };
-    }
-
     // 尝试从API获取projectId
     try {
       log.info('正在验证账号资格...');

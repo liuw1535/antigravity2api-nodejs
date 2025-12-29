@@ -532,7 +532,6 @@ curl http://localhost:8045/v1/chat/completions \
   },
   "other": {
     "timeout": 300000,         // 请求超时时间（毫秒）
-    "skipProjectIdFetch": false,// 跳过 ProjectId 获取，直接随机生成（仅 Pro 账号有效）
     "useNativeAxios": false,   // 使用原生 axios 而非 AntigravityRequester
     "useContextSystemPrompt": false, // 是否将请求中的 system 消息合并到 SystemInstruction
     "passSignatureToClient": false   // 是否将 thoughtSignature 透传到客户端
@@ -650,25 +649,6 @@ npm run login
 ├── docker-compose.yml      # Docker Compose 配置
 └── package.json            # 项目配置
 ```
-
-## Pro 账号随机 ProjectId
-
-对于 Pro 订阅账号，可以跳过 API 验证直接使用随机生成的 ProjectId：
-
-1. 在 `config.json` 文件中设置：
-```json
-{
-  "other": {
-    "skipProjectIdFetch": true
-  }
-}
-```
-
-2. 运行 `npm run login` 登录时会自动使用随机生成的 ProjectId
-
-3. 已有账号也会在使用时自动生成随机 ProjectId
-
-注意：此功能仅适用于 Pro 订阅账号。官方已修复免费账号使用随机 ProjectId 的漏洞。
 
 ## 资格校验自动回退
 

@@ -161,7 +161,6 @@ export function buildConfig(jsonConfig) {
     retryTimes: Number.isFinite(jsonConfig.other?.retryTimes) ? jsonConfig.other.retryTimes : DEFAULT_RETRY_TIMES,
     proxy: getProxyConfig(),
     systemInstruction: process.env.SYSTEM_INSTRUCTION || '',
-    skipProjectIdFetch: jsonConfig.other?.skipProjectIdFetch === true,
     useContextSystemPrompt: jsonConfig.other?.useContextSystemPrompt === true,
     passSignatureToClient: jsonConfig.other?.passSignatureToClient === true
   };

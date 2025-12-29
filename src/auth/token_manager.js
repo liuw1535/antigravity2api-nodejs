@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { log } from '../utils/logger.js';
-import { generateSessionId, generateProjectId } from '../utils/idGenerator.js';
+import { generateSessionId } from '../utils/idGenerator.js';
 import config, { getConfigJson } from '../config/config.js';
 import { OAUTH_CONFIG } from '../constants/oauth.js';
 import { buildAxiosRequestConfig } from '../utils/httpClient.js';
@@ -524,19 +524,13 @@ class TokenManager {
 
     // 获取 projectId
     if (!token.projectId) {
-      if (config.skipProjectIdFetch) {
-        token.projectId = generateProjectId();
-        this.saveToFile(token);
-        log.info(`...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`);
-      } else {
-        const projectId = await this.fetchProjectId(token);
-        if (projectId === undefined) {
-          log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`);
-          return { status: 'disable', reason: '无资格获取projectId' };
-        }
-        token.projectId = projectId;
-        this.saveToFile(token);
+      const projectId = await this.fetchProjectId(token);
+      if (projectId === undefined) {
+        log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`);
+        return { status: 'disable', reason: '无资格获取projectId' };
       }
+      token.projectId = projectId;
+      this.saveToFile(token);
     }
 
     return { status: 'ready' };

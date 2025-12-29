@@ -275,7 +275,6 @@ curl http://localhost:8045/v1/chat/completions \
     "other": {
       "timeout": 300000,
       "retryTimes": 3,
-      "skipProjectIdFetch": false,
       "useNativeAxios": false
     }
     ```
