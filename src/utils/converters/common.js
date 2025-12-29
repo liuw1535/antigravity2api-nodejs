@@ -96,11 +96,19 @@ export function createThoughtPart(text) {
  * @returns {Object} 函数调用 part
  */
 export function createFunctionCallPart(id, name, args, signature = null) {
+  let parsedArgs = args;
+  if (typeof args === 'string') {
+    try {
+      parsedArgs = JSON.parse(args);
+    } catch {
+      parsedArgs = { query: args };
+    }
+  }
   const part = {
     functionCall: {
       id,
       name,
-      args: typeof args === 'string' ? { query: args } : args
+      args: parsedArgs
     }
   };
   if (signature) {
