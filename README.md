@@ -917,6 +917,10 @@ src/utils/toolConverter.js  # 统一的工具定义转换
 4. 支持多账号轮换，提高可用性
 5. Token 会自动刷新，无需手动维护
 
+## 致谢
+
+本项目部分代码参考了 [gcli2api](https://github.com/su-kaka/gcli2api) by su-kaka (CNC-1.0 License)
+
 ## License
 
 MIT
