@@ -282,12 +282,12 @@ class TokenManager {
     if (allowedTiers && Array.isArray(allowedTiers)) {
       // 查找默认 tier
       const defaultTier = allowedTiers.find(t => t.isDefault === true);
-      if (defaultTier?.tierId) {
-        return defaultTier.tierId;
+      if (defaultTier?.id) {
+        return defaultTier.id;
       }
       // 如果没有默认值，使用第一个
-      if (allowedTiers[0]?.tierId) {
-        return allowedTiers[0].tierId;
+      if (allowedTiers[0]?.id) {
+        return allowedTiers[0].id;
       }
     }
     // 回退到 LEGACY
