@@ -221,20 +221,165 @@ class TokenManager {
     }
   }
 
+  /**
+   * 构建 Antigravity API 请求头
+   * @param {string} accessToken - 访问令牌
+   * @returns {Object} 请求头对象
+   * @private
+   */
+  _buildAntigravityHeaders(accessToken) {
+    return {
+      'Host': 'daily-cloudcode-pa.sandbox.googleapis.com',
+      'User-Agent': 'antigravity/1.11.9 windows/amd64',
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'Accept-Encoding': 'gzip'
+    };
+  }
+
+  /**
+   * 尝试通过 loadCodeAssist 获取 projectId
+   * @param {Object} token - Token 对象
+   * @returns {Promise<{projectId: string|undefined, activated: boolean}>} 结果
+   * @private
+   */
+  async _tryLoadCodeAssist(token) {
+    try {
+      const response = await axios(buildAxiosRequestConfig({
+        method: 'POST',
+        url: 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:loadCodeAssist',
+        headers: this._buildAntigravityHeaders(token.access_token),
+        data: JSON.stringify({
+          metadata: {
+            ideType: 'ANTIGRAVITY',
+            platform: 'PLATFORM_UNSPECIFIED',
+            pluginType: 'GEMINI'
+          }
+        }),
+        timeout: 30000
+      }));
+
+      const data = response.data;
+      // 检查用户是否已激活（有 currentTier 表示已激活）
+      if (data?.currentTier) {
+        return { projectId: data.cloudaicompanionProject, activated: true };
+      }
+      // 未激活，返回 allowedTiers 供后续使用
+      return { projectId: undefined, activated: false, allowedTiers: data?.allowedTiers };
+    } catch (error) {
+      log.warn('loadCodeAssist 请求失败:', error.message);
+      return { projectId: undefined, activated: false };
+    }
+  }
+
+  /**
+   * 获取默认的 onboard tier
+   * @param {Array} allowedTiers - 允许的 tier 列表
+   * @returns {string} tier ID
+   * @private
+   */
+  _getDefaultTier(allowedTiers) {
+    if (allowedTiers && Array.isArray(allowedTiers)) {
+      // 查找默认 tier
+      const defaultTier = allowedTiers.find(t => t.isDefault === true);
+      if (defaultTier?.tierId) {
+        return defaultTier.tierId;
+      }
+      // 如果没有默认值，使用第一个
+      if (allowedTiers[0]?.tierId) {
+        return allowedTiers[0].tierId;
+      }
+    }
+    // 回退到 LEGACY
+    return 'LEGACY';
+  }
+
+  /**
+   * 尝试通过 onboardUser 激活用户并获取 projectId
+   * @param {Object} token - Token 对象
+   * @param {string} tierId - Tier ID
+   * @returns {Promise<string|undefined>} projectId 或 undefined
+   * @private
+   */
+  async _tryOnboardUser(token, tierId) {
+    try {
+      log.info('尝试通过 onboardUser 激活账号...');
+
+      const response = await axios(buildAxiosRequestConfig({
+        method: 'POST',
+        url: 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:onboardUser',
+        headers: this._buildAntigravityHeaders(token.access_token),
+        data: JSON.stringify({
+          tierId: tierId,
+          metadata: {
+            ideType: 'ANTIGRAVITY',
+            platform: 'PLATFORM_UNSPECIFIED',
+            pluginType: 'GEMINI'
+          }
+        }),
+        timeout: 30000
+      }));
+
+      // onboardUser 返回长时间运行操作，需要轮询
+      const operationData = response.data;
+
+      // 如果直接返回了结果
+      if (operationData?.done) {
+        const project = operationData.response?.cloudaicompanionProject;
+        if (typeof project === 'object') {
+          return project.id;
+        }
+        return project;
+      }
+
+      // 轮询等待操作完成（最多 5 次，每次间隔 2 秒）
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 再次调用 loadCodeAssist 检查是否已激活
+        const checkResult = await this._tryLoadCodeAssist(token);
+        if (checkResult.activated && checkResult.projectId) {
+          log.info('onboardUser 激活成功');
+          return checkResult.projectId;
+        }
+        log.info(`等待激活完成... (${i + 1}/5)`);
+      }
+
+      log.warn('onboardUser 轮询超时');
+      return undefined;
+    } catch (error) {
+      log.warn('onboardUser 失败:', error.message);
+      return undefined;
+    }
+  }
+
+  /**
+   * 获取 projectId（带回退机制）
+   * 1. 先尝试 loadCodeAssist
+   * 2. 如果未激活，尝试 onboardUser 激活
+   * 3. 全部失败返回 undefined
+   * @param {Object} token - Token 对象
+   * @returns {Promise<string|undefined>} projectId 或 undefined
+   */
   async fetchProjectId(token) {
-    const response = await axios(buildAxiosRequestConfig({
-      method: 'POST',
-      url: 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:loadCodeAssist',
-      headers: {
-        'Host': 'daily-cloudcode-pa.sandbox.googleapis.com',
-        'User-Agent': 'antigravity/1.11.9 windows/amd64',
-        'Authorization': `Bearer ${token.access_token}`,
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'gzip'
-      },
-      data: JSON.stringify({ metadata: { ideType: 'ANTIGRAVITY' } })
-    }));
-    return response.data?.cloudaicompanionProject;
+    // 1. 先尝试 loadCodeAssist
+    const loadResult = await this._tryLoadCodeAssist(token);
+
+    if (loadResult.activated && loadResult.projectId) {
+      return loadResult.projectId;
+    }
+
+    // 2. 未激活，尝试 onboardUser
+    const tierId = this._getDefaultTier(loadResult.allowedTiers);
+    log.info(`账号未激活，尝试使用 tier "${tierId}" 进行激活...`);
+
+    const onboardResult = await this._tryOnboardUser(token, tierId);
+    if (onboardResult) {
+      return onboardResult;
+    }
+
+    // 3. 全部失败
+    return undefined;
   }
 
   /**
