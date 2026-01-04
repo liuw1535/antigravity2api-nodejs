@@ -54,8 +54,54 @@ export function cleanParameters(obj) {
   return cleaned;
 }
 
-// ==================== 模型映射 ====================
+// ==================== Model Mapping ====================
+// Map Anthropic official model names to Antigravity model names
+// Supports Claude Code and other clients that use official Anthropic model naming
 export function modelMapping(modelName) {
+  // Dynamic matching for Anthropic official model name formats:
+  // - claude-{type}-{major}-{minor}-{date} (e.g., claude-sonnet-4-5-20250929)
+  // - claude-{type}-{major}-{date} (e.g., claude-sonnet-4-20250514)
+  // - claude-{major}-{minor}-{type}-{date} (e.g., claude-3-5-sonnet-20241022)
+  // - claude-{major}-{type}-{date} (e.g., claude-3-opus-20240229)
+  // - claude-{version}-{type}-latest (e.g., claude-3-5-sonnet-latest)
+
+  // Pattern 1: claude-{type}-{version}-{date} (Claude 4+ format)
+  // e.g., claude-sonnet-4-5-20250929, claude-opus-4-20250514
+  const pattern1 = modelName.match(/^claude-(sonnet|opus|haiku)-\d+(-\d+)?-\d{8}$/);
+  if (pattern1) {
+    const type = pattern1[1];
+    if (type === 'opus') return 'claude-opus-4-5-thinking';
+    return 'claude-sonnet-4-5';
+  }
+
+  // Pattern 2: claude-{major}-{minor}-{type}-{date} (Claude 3.x format)
+  // e.g., claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022
+  const pattern2 = modelName.match(/^claude-\d+-\d+-(sonnet|opus|haiku)-\d{8}$/);
+  if (pattern2) {
+    const type = pattern2[1];
+    if (type === 'opus') return 'claude-opus-4-5-thinking';
+    return 'claude-sonnet-4-5';
+  }
+
+  // Pattern 3: claude-{major}-{type}-{date} (Claude 3 format)
+  // e.g., claude-3-opus-20240229, claude-3-sonnet-20240229
+  const pattern3 = modelName.match(/^claude-\d+-(sonnet|opus|haiku)-\d{8}$/);
+  if (pattern3) {
+    const type = pattern3[1];
+    if (type === 'opus') return 'claude-opus-4-5-thinking';
+    return 'claude-sonnet-4-5';
+  }
+
+  // Pattern 4: claude-{version}-{type}-latest
+  // e.g., claude-3-5-sonnet-latest, claude-3-opus-latest
+  const pattern4 = modelName.match(/^claude-(\d+-)?(.+)-latest$/);
+  if (pattern4) {
+    const remainder = pattern4[2];
+    if (remainder.includes('opus')) return 'claude-opus-4-5-thinking';
+    return 'claude-sonnet-4-5';
+  }
+
+  // Original logic (kept for backward compatibility)
   if (modelName === 'claude-sonnet-4-5-thinking') return 'claude-sonnet-4-5';
   if (modelName === 'claude-opus-4-5') return 'claude-opus-4-5-thinking';
   if (modelName === 'gemini-2.5-flash-thinking') return 'gemini-2.5-flash';
@@ -65,6 +111,7 @@ export function modelMapping(modelName) {
 export function isEnableThinking(modelName) {
   return modelName.includes('-thinking') ||
     modelName === 'gemini-2.5-pro' ||
+    modelName === 'gemini-3-flash' ||
     modelName.startsWith('gemini-3-pro-') ||
     modelName === 'rev19-uic3-1p' ||
     modelName === 'gpt-oss-120b-medium';
