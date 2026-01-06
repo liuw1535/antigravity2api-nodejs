@@ -4,7 +4,7 @@ services:
   antigravity2api:
     build: .
     ports:
-      - "8045:8045"
+      - "${PORT:-8045}:8045"
     environment:
       - API_KEY=${API_KEY:-sk-text}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
