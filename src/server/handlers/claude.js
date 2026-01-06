@@ -3,7 +3,7 @@
  * 处理 /v1/messages 请求，支持流式和非流式响应
  */
 
-import { generateAssistantResponse, generateAssistantResponseNoStream } from '../../api/client.js';
+import { generateAssistantResponse, generateAssistantResponseNoStream, getAvailableModels } from '../../api/client.js';
 import { generateClaudeRequestBody, prepareImageRequest } from '../../utils/utils.js';
 import { normalizeClaudeParameters } from '../../utils/parameterNormalizer.js';
 import { buildClaudeErrorPayload } from '../../utils/errors.js';
@@ -15,6 +15,70 @@ import {
   createHeartbeat,
   with429Retry
 } from '../stream.js';
+
+/**
+ * 将 OpenAI 模型列表转换为 Claude 格式
+ * @param {Object} openaiModels - OpenAI格式模型列表
+ * @returns {Object}
+ */
+export const convertToClaudeModelList = (openaiModels) => {
+  const models = openaiModels.data.map(model => ({
+    id: model.id,
+    display_name: model.id,
+    created_at: new Date(model.created * 1000).toISOString(),
+    type: "model"
+  }));
+  return {
+    data: models,
+    has_more: false,
+    first_id: models.length > 0 ? models[0].id : null,
+    last_id: models.length > 0 ? models[models.length - 1].id : null
+  };
+};
+
+/**
+ * 获取 Claude 格式模型列表
+ * @param {Request} req - Express请求对象
+ * @param {Response} res - Express响应对象
+ */
+export const handleClaudeModelsList = async (req, res) => {
+  try {
+    const openaiModels = await getAvailableModels();
+    const claudeModels = convertToClaudeModelList(openaiModels);
+    res.json(claudeModels);
+  } catch (error) {
+    logger.error('获取 Claude 模型列表失败:', error.message);
+    res.status(500).json(buildClaudeErrorPayload(error, 500));
+  }
+};
+
+/**
+ * 获取单个模型详情（Claude格式）
+ * @param {Request} req - Express请求对象
+ * @param {Response} res - Express响应对象
+ */
+export const handleClaudeModelDetail = async (req, res) => {
+  try {
+    const modelId = req.params.model_id;
+    const openaiModels = await getAvailableModels();
+    const model = openaiModels.data.find(m => m.id === modelId);
+
+    if (model) {
+      const claudeModel = {
+        id: model.id,
+        display_name: model.id,
+        created_at: new Date(model.created * 1000).toISOString(),
+        type: "model"
+      };
+      res.json(claudeModel);
+    } else {
+      res.status(404).json(buildClaudeErrorPayload({ message: `Model ${modelId} not found` }, 404));
+    }
+  } catch (error) {
+    logger.error('获取 Claude 模型详情失败:', error.message);
+    res.status(500).json(buildClaudeErrorPayload(error, 500));
+  }
+};
 
 /**
  * 创建 Claude 流式事件

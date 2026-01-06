@@ -93,14 +93,15 @@ app.use((req, res, next) => {
 
 // ==================== API 路由 ====================
 
+// Claude 兼容 API（先检查 Claude 格式，因为它有特殊的 header 判断）
+app.use('/v1', claudeRouter);
+
 // OpenAI 兼容 API
 app.use('/v1', openaiRouter);
 
-// Gemini 兼容 API
+// Gemini 兼容 API（同时支持 v1 和 v1beta）
 app.use('/v1beta', geminiRouter);
-
-// Claude 兼容 API（/v1/messages 由 claudeRouter 处理）
-app.use('/v1', claudeRouter);
+app.use('/v1', geminiRouter);
 
 // ==================== 系统端点 ====================
 

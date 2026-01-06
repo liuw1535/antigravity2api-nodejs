@@ -1,6 +1,7 @@
 /**
  * Gemini API 路由
- * 处理 /v1beta/models/* 端点
+ * 同时支持 /v1/models/* 和 /v1beta/models/* 端点
+ * Google 官方 API 已有 v1 稳定版，但 v1beta 仍然广泛使用
  */
 
 import { Router } from 'express';
