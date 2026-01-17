@@ -122,7 +122,7 @@ function LogItem({ log, searchKeyword, onCopy }: { log: LogEntry; searchKeyword:
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
               onClick={handleCopy}
             >
               {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -331,12 +331,12 @@ export function LogsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">系统日志</h2>
           <p className="text-muted-foreground">查看系统运行日志</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={autoRefresh ? 'default' : 'outline'}
             size="sm"
@@ -403,14 +403,14 @@ export function LogsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>日志列表</CardTitle>
               <CardDescription>
                 {currentLevel === 'all' ? '显示全部' : `仅显示${LEVEL_CONFIG[currentLevel].label}`} · 共 {logs.length} / {total} 条
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="搜索日志..."
@@ -437,7 +437,7 @@ export function LogsPage() {
             </div>
           ) : (
             <>
-              <ScrollArea className="h-[500px]" ref={scrollRef}>
+              <ScrollArea className="h-[calc(100vh-300px)] min-h-[300px] max-h-[600px]" ref={scrollRef}>
                 <div className="space-y-1">
                   {logs.map((log, index) => (
                     <LogItem

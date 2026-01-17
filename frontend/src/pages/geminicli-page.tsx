@@ -275,14 +275,14 @@ export function GeminiCliPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Gemini CLI Token</h2>
           <p className="text-muted-foreground">
             管理 Gemini CLI Token · 共 {stats.total} 个 ({stats.enabled} 启用)
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => reloadMutation.mutate()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             重新加载
@@ -340,7 +340,7 @@ export function GeminiCliPage() {
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant={filter === 'all' ? 'default' : 'outline'}
           size="sm"
@@ -383,45 +383,19 @@ export function GeminiCliPage() {
               {filter === 'all' ? '暂无 Token，点击 OAuth 授权或手动添加' : `暂无${filter === 'enabled' ? '启用' : '禁用'}的 Token`}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>邮箱 / Token ID</TableHead>
-                  <TableHead>Project ID</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>过期时间</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile Card View */}
+              <div className="grid grid-cols-1 gap-3 md:hidden">
                 {filteredTokens.map((token) => {
                   const expiresAt = token.timestamp + (token.expires_in || 3599) * 1000;
                   const expired = isExpired(token);
                   return (
-                    <TableRow key={token.id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{token.email || '-'}</span>
-                          <span className="font-mono text-xs text-muted-foreground">{token.id.substring(0, 16)}...</span>
+                    <Card key={token.id} className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{token.email || '-'}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{token.id.substring(0, 16)}...</p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {token.projectId ? (
-                          <span className="font-mono text-sm">{token.projectId}</span>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                            onClick={() => fetchProjectIdMutation.mutate(token.id)}
-                            disabled={fetchProjectIdMutation.isPending}
-                          >
-                            <FolderSearch className="mr-1 h-3 w-3" />
-                            获取
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell>
                         {!token.enable ? (
                           <Badge variant="secondary">已禁用</Badge>
                         ) : expired ? (
@@ -429,53 +403,150 @@ export function GeminiCliPage() {
                         ) : (
                           <Badge variant="default">活跃</Badge>
                         )}
-                      </TableCell>
-                      <TableCell className="text-sm">{formatDate(expiresAt)}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => refreshMutation.mutate(token.id)}>
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              刷新 Token
-                            </DropdownMenuItem>
-                            {!token.projectId && (
-                              <DropdownMenuItem onClick={() => fetchProjectIdMutation.mutate(token.id)}>
-                                <FolderSearch className="mr-2 h-4 w-4" />
-                                获取 Project ID
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => toggleMutation.mutate({ tokenId: token.id, enable: !token.enable })}>
-                              {token.enable ? (
-                                <>
-                                  <PowerOff className="mr-2 h-4 w-4" />
-                                  禁用
-                                </>
-                              ) : (
-                                <>
-                                  <Power className="mr-2 h-4 w-4" />
-                                  启用
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTokenId(token.id)}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm mb-3">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Project ID:</span>
+                          <span className="font-mono">{token.projectId || '-'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">过期时间:</span>
+                          <span>{formatDate(expiresAt)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2 pt-3 border-t">
+                        <Button variant="outline" size="sm" onClick={() => refreshMutation.mutate(token.id)}>
+                          <RefreshCw className="mr-1 h-3 w-3" />
+                          刷新
+                        </Button>
+                        {!token.projectId && (
+                          <Button variant="outline" size="sm" onClick={() => fetchProjectIdMutation.mutate(token.id)}>
+                            <FolderSearch className="mr-1 h-3 w-3" />
+                            获取 Project ID
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => toggleMutation.mutate({ tokenId: token.id, enable: !token.enable })}
+                        >
+                          {token.enable ? <PowerOff className="mr-1 h-3 w-3" /> : <Power className="mr-1 h-3 w-3" />}
+                          {token.enable ? '禁用' : '启用'}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-destructive"
+                          onClick={() => setDeleteTokenId(token.id)}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" />
+                          删除
+                        </Button>
+                      </div>
+                    </Card>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>邮箱 / Token ID</TableHead>
+                      <TableHead>Project ID</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>过期时间</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTokens.map((token) => {
+                      const expiresAt = token.timestamp + (token.expires_in || 3599) * 1000;
+                      const expired = isExpired(token);
+                      return (
+                        <TableRow key={token.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{token.email || '-'}</span>
+                              <span className="font-mono text-xs text-muted-foreground">{token.id.substring(0, 16)}...</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {token.projectId ? (
+                              <span className="font-mono text-sm">{token.projectId}</span>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => fetchProjectIdMutation.mutate(token.id)}
+                                disabled={fetchProjectIdMutation.isPending}
+                              >
+                                <FolderSearch className="mr-1 h-3 w-3" />
+                                获取
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {!token.enable ? (
+                              <Badge variant="secondary">已禁用</Badge>
+                            ) : expired ? (
+                              <Badge variant="destructive">已过期</Badge>
+                            ) : (
+                              <Badge variant="default">活跃</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">{formatDate(expiresAt)}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => refreshMutation.mutate(token.id)}>
+                                  <RefreshCw className="mr-2 h-4 w-4" />
+                                  刷新 Token
+                                </DropdownMenuItem>
+                                {!token.projectId && (
+                                  <DropdownMenuItem onClick={() => fetchProjectIdMutation.mutate(token.id)}>
+                                    <FolderSearch className="mr-2 h-4 w-4" />
+                                    获取 Project ID
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => toggleMutation.mutate({ tokenId: token.id, enable: !token.enable })}>
+                                  {token.enable ? (
+                                    <>
+                                      <PowerOff className="mr-2 h-4 w-4" />
+                                      禁用
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Power className="mr-2 h-4 w-4" />
+                                      启用
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTokenId(token.id)}>
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  删除
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -495,12 +566,12 @@ export function GeminiCliPage() {
                 <li>粘贴 URL 到下方输入框并提交</li>
               </ol>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => window.open(oauthUrl, '_blank')}>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" className="w-full sm:flex-1" onClick={() => window.open(oauthUrl, '_blank')}>
                 <ExternalLink className="mr-2 h-4 w-4" />
                 打开授权页面
               </Button>
-              <Button variant="outline" className="flex-1" onClick={() => { navigator.clipboard.writeText(oauthUrl); toast.success('链接已复制'); }}>
+              <Button variant="outline" className="w-full sm:flex-1" onClick={() => { navigator.clipboard.writeText(oauthUrl); toast.success('链接已复制'); }}>
                 <Copy className="mr-2 h-4 w-4" />
                 复制链接
               </Button>

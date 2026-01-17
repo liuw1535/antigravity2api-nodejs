@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 interface Token {
@@ -161,7 +162,7 @@ function QuotaSummaryBar({ groupKey, items, requestCount = 0 }: { groupKey: stri
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-1.5 min-w-[100px]">
+          <div className="flex items-center gap-1.5 min-w-[80px] sm:min-w-[100px]">
             <GroupIcon groupKey={groupKey} className="h-3.5 w-3.5 shrink-0" />
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
               <div className={cn('h-full rounded-full transition-all', barColorClass)} style={{ width: `${summary.percentage}%` }} />
@@ -334,7 +335,6 @@ function QuotaDetailModal({ tokenId, tokens, open, onOpenChange }: { tokenId: st
   const [currentTokenId, setCurrentTokenId] = useState(tokenId);
   const [quotaData, setQuotaData] = useState<QuotaData | null>(null);
   const [loading, setLoading] = useState(false);
-  const tabsRef = useRef<HTMLDivElement>(null);
 
   const loadQuota = useCallback(async (tid: string, forceRefresh = false) => {
     if (!forceRefresh) {
@@ -372,19 +372,6 @@ function QuotaDetailModal({ tokenId, tokens, open, onOpenChange }: { tokenId: st
     setCurrentTokenId(tokenId);
   }, [tokenId]);
 
-  useEffect(() => {
-    const container = tabsRef.current;
-    if (!container || !open) return;
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        container.scrollLeft += e.deltaY;
-      }
-    };
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [open]);
-
   const grouped = quotaData?.models ? groupModels(quotaData.models) : {};
   const requestCounts = quotaData?.requestCounts || {};
 
@@ -411,9 +398,9 @@ function QuotaDetailModal({ tokenId, tokens, open, onOpenChange }: { tokenId: st
             {items.map(({ modelId, quota }) => {
               const percentage = toPercentage(quota?.remaining);
               const shortName = modelId.replace('models/', '').replace('publishers/google/', '').split('/').pop();
-              return (
+                return (
                 <div key={modelId} className="flex items-center gap-2" title={`${modelId} - 重置: ${quota.resetTime}`}>
-                  <span className="text-sm w-48 truncate">{shortName}</span>
+                  <span className="text-sm w-full sm:w-48 truncate">{shortName}</span>
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                     <div className={cn('h-full rounded-full', getBarColor(percentage))} style={{ width: `${percentage}%` }} />
                   </div>
@@ -429,7 +416,7 @@ function QuotaDetailModal({ tokenId, tokens, open, onOpenChange }: { tokenId: st
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -445,18 +432,19 @@ function QuotaDetailModal({ tokenId, tokens, open, onOpenChange }: { tokenId: st
           </DialogTitle>
         </DialogHeader>
 
-        <div ref={tabsRef} className="flex gap-1 py-2 overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin' }}>
-          {tokens.filter((t) => t.enable).map((t) => (
-            <Button
-              key={t.id}
-              variant={t.id === currentTokenId ? 'default' : 'outline'}
-              size="sm"
-              className="shrink-0"
-              onClick={() => setCurrentTokenId(t.id)}
-            >
-              {t.email ? (t.email.length > 20 ? t.email.substring(0, 17) + '...' : t.email) : t.id.substring(0, 8)}
-            </Button>
-          ))}
+        <div className="py-2">
+          <Select value={currentTokenId} onValueChange={setCurrentTokenId}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择 Token" />
+            </SelectTrigger>
+            <SelectContent>
+              {tokens.filter((t) => t.enable).map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.email || t.id.substring(0, 16) + '...'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-6 py-4">
@@ -672,14 +660,14 @@ export function TokensPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Token 管理</h2>
           <p className="text-muted-foreground">
             管理 API Token · 共 {tokens.length} 个 ({enabledCount} 启用)
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleRefreshAllQuotas} disabled={refreshingQuotas}>
             <BarChart3 className={cn('mr-2 h-4 w-4', refreshingQuotas && 'animate-pulse')} />
             刷新额度
@@ -740,7 +728,71 @@ export function TokensPage() {
         </div>
       </div>
 
-      <Card>
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-3 md:hidden">
+        {tokens.map((token) => {
+          const expiresAt = token.timestamp + (token.expires_in || 3599) * 1000;
+          const expired = isExpired(expiresAt);
+          
+          return (
+            <Card key={token.id} className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1 min-w-0 mr-2">
+                  <p className="font-medium truncate">{token.email || '-'}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{token.id.substring(0, 16)}...</p>
+                </div>
+                {!token.enable ? (
+                  <Badge variant="secondary" className="shrink-0">已禁用</Badge>
+                ) : expired ? (
+                  <Badge variant="destructive" className="shrink-0">已过期</Badge>
+                ) : (
+                  <Badge variant="default" className="shrink-0">活跃</Badge>
+                )}
+              </div>
+              
+              <div className="text-sm mb-3 text-muted-foreground">
+                <span className="mr-2">过期时间:</span>
+                <span>{formatDate(expiresAt)}</span>
+              </div>
+              
+              <div className="mb-3">
+                <QuotaSummaryCell tokenId={token.id} enabled={token.enable} />
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2 border-t">
+                <Button variant="outline" size="sm" onClick={() => setQuotaModalTokenId(token.id)}>
+                  <BarChart3 className="mr-1 h-3.5 w-3.5" />
+                  详情
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleRefreshSingleQuota(token.id)}>
+                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                  刷新
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => toggleMutation.mutate({ tokenId: token.id, enable: !token.enable })}
+                >
+                  {token.enable ? <PowerOff className="mr-1 h-3.5 w-3.5" /> : <Power className="mr-1 h-3.5 w-3.5" />}
+                  {token.enable ? '禁用' : '启用'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-destructive hover:text-destructive" 
+                  onClick={() => setDeleteTokenId(token.id)}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  删除
+                </Button>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Desktop Table View */}
+      <Card className="hidden md:block">
         <CardHeader>
           <CardTitle>Token 列表</CardTitle>
           <CardDescription>点击行展开查看额度详情</CardDescription>
@@ -760,7 +812,7 @@ export function TokensPage() {
                   <TableHead>邮箱 / Token ID</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>过期时间</TableHead>
-                  <TableHead>额���摘要</TableHead>
+                  <TableHead>额度摘要</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>

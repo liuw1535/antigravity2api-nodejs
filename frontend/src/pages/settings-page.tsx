@@ -197,7 +197,7 @@ export function SettingsPage() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="flex gap-6">
+<div className="flex flex-col md:flex-row gap-6">
           <Skeleton className="h-64 w-48" />
           <Skeleton className="h-96 flex-1" />
         </div>
@@ -213,7 +213,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">设置</h2>
           <p className="text-muted-foreground">配置服务参数</p>
@@ -230,9 +230,24 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-6">
-        {/* 左侧导航 */}
-        <aside className="w-48 shrink-0 space-y-4">
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className="md:hidden w-full space-y-4">
+          <div className="flex flex-col gap-1 p-2 bg-muted rounded-lg">
+            {filteredSections.map((section) => (
+              <Button
+                key={section.id}
+                variant={activeSection === section.id ? 'default' : 'ghost'}
+                className="justify-start w-full"
+                onClick={() => setActiveSection(section.id)}
+              >
+                {section.icon}
+                <span className="ml-2">{section.label}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <aside className="hidden md:block w-48 shrink-0 space-y-4">
           {/* 搜索框 */}
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -277,7 +292,7 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* 端口和监听地址 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className={cn(shouldHighlight('端口') && 'bg-yellow-200 dark:bg-yellow-800')}>
                       端口
@@ -320,7 +335,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* 最大请求大小和 API 密钥 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>最大请求大小</Label>
                     <Input
@@ -341,7 +356,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* 开关选项 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label>
@@ -403,7 +418,7 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* 温度和 Top P */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>温度</Label>
                     <Input
@@ -427,7 +442,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* Top K 和最大 Token */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Top K</Label>
                     <Input
@@ -463,7 +478,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* 开关选项 */}
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-sm">
@@ -589,7 +604,7 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* 签名相关开关 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-sm">
@@ -616,7 +631,7 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-sm">
@@ -643,7 +658,7 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-sm">
@@ -671,7 +686,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* 轮询策略 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       策略模式
@@ -723,7 +738,7 @@ export function SettingsPage() {
                 )}
 
                 {/* 超时和重试 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>超时 (ms)</Label>
                     <Input
@@ -745,7 +760,7 @@ export function SettingsPage() {
                 </div>
 
                 {/* 心跳和内存清理间隔 */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       心跳间隔 (ms)
