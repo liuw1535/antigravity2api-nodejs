@@ -152,6 +152,15 @@ export const handleClaudeRequest = async (req, res, isStream) => {
             } else if (data.type === 'reasoning') {
               // 思维链内容 - 使用 thinking 类型
               if (!reasoningSent) {
+                // 如果之前已经发送了 text block，先关闭它
+                if (currentBlockType === 'text') {
+                  res.write(createClaudeStreamEvent('content_block_stop', {
+                    type: "content_block_stop",
+                    index: contentIndex
+                  }));
+                  contentIndex++;
+                  currentBlockType = null;
+                }
                 // 开始思维块
                 const contentBlock = { type: "thinking", thinking: "" };
                 if (data.thoughtSignature && config.passSignatureToClient) {
@@ -216,6 +225,13 @@ export const handleClaudeRequest = async (req, res, isStream) => {
               currentBlockType = null;
             } else {
               // 普通文本内容
+              const textContent = data.content || '';
+
+              // 如果 thinking 还没发送且内容是空的，跳过（避免在 thinking 之前创建空的 text block）
+              if (!reasoningSent && !textContent) {
+                return;
+              }
+
               if (currentBlockType === 'thinking') {
                 // 结束思维块
                 res.write(createClaudeStreamEvent('content_block_stop', {
@@ -238,7 +254,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
               res.write(createClaudeStreamEvent('content_block_delta', {
                 type: "content_block_delta",
                 index: contentIndex,
-                delta: { type: "text_delta", text: data.content || '' }
+                delta: { type: "text_delta", text: textContent }
               }));
             }
           }),
@@ -260,7 +276,9 @@ export const handleClaudeRequest = async (req, res, isStream) => {
         res.write(createClaudeStreamEvent('message_delta', {
           type: "message_delta",
           delta: { stop_reason: stopReason, stop_sequence: null },
-          usage: usageData ? { output_tokens: usageData.completion_tokens || 0 } : { output_tokens: 0 }
+          usage: usageData
+            ? { input_tokens: usageData.prompt_tokens || 0, output_tokens: usageData.completion_tokens || 0 }
+            : { input_tokens: 0, output_tokens: 0 }
         }));
 
         // 发送 message_stop

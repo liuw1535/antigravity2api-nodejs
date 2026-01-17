@@ -67,7 +67,7 @@ export const handleGeminiModelDetail = async (req, res) => {
     const modelId = req.params.model.replace(/^models\//, '');
     const openaiModels = await getAvailableModels();
     const model = openaiModels.data.find(m => m.id === modelId);
-    
+
     if (model) {
       const geminiModel = {
         name: `models/${model.id}`,
@@ -100,7 +100,7 @@ export const handleGeminiModelDetail = async (req, res) => {
  */
 export const handleGeminiRequest = async (req, res, modelName, isStream) => {
   const safeRetries = getSafeRetries(config.retryTimes);
-  
+
   try {
     const body = req.body || {};
     const validation = validateIncomingChatRequest('gemini', body);
@@ -115,7 +115,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
 
     const isImageModel = modelName.includes('-image');
     const requestBody = generateGeminiRequestBody(body, modelName, token);
-    
+
     if (isImageModel) {
       prepareImageRequest(requestBody);
     }
@@ -138,7 +138,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
           endStream(res, false);
           return;
         }
-        
+
         let usageData = null;
         let hasToolCall = false;
 
@@ -171,13 +171,13 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
         writeStreamData(res, finalChunk);
 
         clearInterval(heartbeatTimer);
-        endStream(res);
+        endStream(res, false);
       } catch (error) {
         clearInterval(heartbeatTimer);
         if (!res.writableEnded) {
           const statusCode = error.statusCode || error.status || 500;
           writeStreamData(res, buildGeminiErrorPayload(error, statusCode));
-          endStream(res);
+          endStream(res, false);
         }
         logger.error('Gemini 流式请求失败:', error.message);
         return;
@@ -186,13 +186,13 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
       // 假非流模式：使用流式API获取数据，组装成非流式响应
       req.setTimeout(0);
       res.setTimeout(0);
-      
+
       let content = '';
       let reasoningContent = '';
       let reasoningSignature = null;
       const toolCalls = [];
       let usageData = null;
-      
+
       try {
         await with429Retry(
           () => generateAssistantResponse(requestBody, token, (data) => {
@@ -212,7 +212,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
           safeRetries,
           'gemini.fake_no_stream '
         );
-        
+
         const finishReason = "STOP";
         const response = createGeminiResponse(content, reasoningContent || null, reasoningSignature, toolCalls, finishReason, usageData, { passSignatureToClient: config.passSignatureToClient });
         res.json(response);

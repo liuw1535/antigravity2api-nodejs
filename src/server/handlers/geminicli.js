@@ -56,11 +56,11 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
       throw new Error('没有可用的 Gemini CLI token，请在管理页面添加账号');
     }
     const { geminiRequest, model: actualModel, features, sourceFormat } = convertToGeminiCli(cleanedBody);
-    
+
 
     // 保存原始请求的模型名称用于响应
     const responseModel = requestBody.model || actualModel;
-    
+
     const { id, created } = createResponseMeta();
     const safeRetries = getSafeRetries(config.retryTimes);
 
@@ -92,13 +92,13 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         writer.finalize();
 
         clearInterval(heartbeatTimer);
-        endStream(res);
+        endStream(res, false);
       } catch (error) {
         clearInterval(heartbeatTimer);
         if (!res.writableEnded) {
           const statusCode = error.statusCode || error.status || 500;
           writeStreamData(res, buildOpenAIErrorPayload(error, statusCode));
-          endStream(res);
+          endStream(res, false);
         }
         logger.error('[GeminiCLI] 生成响应失败:', error.message);
         return;
@@ -139,13 +139,13 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         });
 
         clearInterval(heartbeatTimer);
-        endStream(res);
+        endStream(res, false);
       } catch (error) {
         clearInterval(heartbeatTimer);
         if (!res.writableEnded) {
           const statusCode = error.statusCode || error.status || 500;
           writeStreamData(res, buildOpenAIErrorPayload(error, statusCode));
-          endStream(res);
+          endStream(res, false);
         }
         logger.error('[GeminiCLI] 假流式生成响应失败:', error.message);
         return;
@@ -166,7 +166,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
       const isImage = isImageModel(actualModel);
       let finalReasoningSignature = reasoningSignature;
       let finalReasoningContent = reasoningContent;
-      
+
       if (!finalReasoningSignature && actualModel) {
         // 尝试从缓存获取签名
         const cached = getSignature(null, actualModel, { hasTools });
@@ -178,7 +178,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
           }
         }
       }
-      
+
       // 缓存签名（非流式响应）
       if (finalReasoningSignature && actualModel) {
         if (shouldCacheSignature({ hasTools, isImageModel: isImage })) {

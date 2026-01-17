@@ -30,3 +30,6 @@ dist/
 # 参考文件
 gcli2api/
 plans/geminicli-implementation-plan.md
+
+# 前端构建产物
+public/v2/
