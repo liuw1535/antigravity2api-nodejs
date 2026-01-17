@@ -64,6 +64,12 @@ app.use(express.json({ limit: config.security.maxRequestSize }));
 app.use('/images', express.static(path.join(publicDir, 'images')));
 app.use(express.static(publicDir));
 
+// V2 管理面板（SPA 路由）
+app.use('/v2', express.static(path.join(publicDir, 'v2')));
+app.get('/v2/{*splat}', (req, res) => {
+  res.sendFile(path.join(publicDir, 'v2', 'index.html'));
+});
+
 // 管理路由
 app.use('/admin', adminRouter);
 
