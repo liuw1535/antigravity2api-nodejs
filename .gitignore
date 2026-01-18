@@ -30,3 +30,23 @@ dist/
 # 参考文件
 gcli2api/
 plans/geminicli-implementation-plan.md
+
+# 前端构建产物
+public/v2/
+
+# AI 工具生成的文件
+.claude/
+.claude_*
+.cursor/
+.cursor_*
+.aider*
+.opencode/
+.opencode_*
+.copilot/
+.github/copilot/
+.codeium/
+.tabnine/
+.continue/
+.windsurf/
+CLAUDE.md
+AGENTS.md
