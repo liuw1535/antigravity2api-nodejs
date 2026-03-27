@@ -83,6 +83,33 @@ function parseProxyPoolLine(line, protocol) {
     return urlProxy;
   }
 
+  if (trimmed.includes("@")) {
+    const [authPart, hostPart] = trimmed.split("@");
+    const authSegments = authPart.split(":");
+    const hostSegments = hostPart.split(":");
+
+    if (authSegments.length >= 2 && hostSegments.length >= 2) {
+      const username = authSegments.shift() || "";
+      const password = authSegments.join(":");
+      const host = hostSegments.shift() || "";
+      const port = Number.parseInt(hostSegments.join(":"), 10);
+
+      if (!host || !username || !Number.isInteger(port) || port <= 0) {
+        throw new Error(`代理格式无效: ${trimmed}`);
+      }
+
+      return {
+        raw: trimmed,
+        protocol,
+        host,
+        port,
+        username,
+        password,
+        url: buildProxyUrl({ protocol, host, port, username, password }),
+      };
+    }
+  }
+
   const segments = trimmed.split(":");
   if (segments.length < 2) {
     throw new Error(`代理格式无效: ${trimmed}`);
