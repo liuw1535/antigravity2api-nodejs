@@ -43,26 +43,31 @@
 ### 方式一：一键部署脚本（推荐）
 
 **Windows (cmd.exe)**：
+
 ```bash
 curl -O https://raw.githubusercontent.com/liuw1535/antigravity2api-nodejs/main/setup.bat && setup.bat
 ```
 
 **Windows (PowerShell)**：
+
 ```powershell
 IwR -Uri https://raw.githubusercontent.com/liuw1535/antigravity2api-nodejs/main/setup.bat -OutFile setup.bat; .\setup.bat
 ```
 
 **Linux/macOS**：
+
 ```bash
 wget https://raw.githubusercontent.com/liuw1535/antigravity2api-nodejs/main/setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 或使用 curl：
+
 ```bash
 curl -O https://raw.githubusercontent.com/liuw1535/antigravity2api-nodejs/main/setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 脚本会自动完成以下操作：
+
 1. 克隆项目仓库
 2. 安装依赖
 3. 复制配置文件
@@ -74,11 +79,13 @@ curl -O https://raw.githubusercontent.com/liuw1535/antigravity2api-nodejs/main/s
 如果已经部署成功，可以使用启动脚本快速启动服务：
 
 **Windows**：
+
 ```bash
 start.bat
 ```
 
 **Linux/macOS**：
+
 ```bash
 chmod +x start.sh
 ./start.sh
@@ -89,17 +96,20 @@ chmod +x start.sh
 使用更新脚本可以安全地更新到最新版本（自动保存本地修改）：
 
 **Windows**：
+
 ```bash
 update.bat
 ```
 
 **Linux/macOS**：
+
 ```bash
 chmod +x update.sh
 ./update.sh
 ```
 
 更新完成后，可以选择：
+
 - 恢复本地修改：`git stash pop`
 - 删除本地修改：`git stash drop`
 
@@ -118,7 +128,7 @@ npm install
 你也可以手动复制示例文件：
 
 ```bash
-cp .env.example .env,.
+cp .env.example .env
 cp config.json.example config.json
 ```
 
@@ -161,12 +171,12 @@ npm start
 
 从 [GitHub Releases](https://github.com/ZhaoShanGeng/antigravity2api-nodejs/releases) 下载对应平台的二进制文件：
 
-| 平台 | 文件名 |
-|------|--------|
+| 平台        | 文件名                        |
+| ----------- | ----------------------------- |
 | Windows x64 | `antigravity2api-win-x64.exe` |
-| Linux x64 | `antigravity2api-linux-x64` |
+| Linux x64   | `antigravity2api-linux-x64`   |
 | Linux ARM64 | `antigravity2api-linux-arm64` |
-| macOS x64 | `antigravity2api-macos-x64` |
+| macOS x64   | `antigravity2api-macos-x64`   |
 | macOS ARM64 | `antigravity2api-macos-arm64` |
 
 ### 准备配置文件
@@ -210,12 +220,14 @@ JWT_SECRET=your-jwt-secret-key-change-this-in-production
 ### 运行
 
 **Windows**：
+
 ```bash
 # 直接双击运行，或在命令行执行
 antigravity2api-win-x64.exe
 ```
 
 **Linux/macOS**：
+
 ```bash
 # 添加执行权限
 chmod +x antigravity2api-linux-x64
@@ -273,24 +285,25 @@ npm run docker:build
 ```
 
 该命令会自动：
+
 - 从 `.env.example` 创建 `.env`（如果不存在）
 - 从 `config.json.example` 创建 `config.json`（如果不存在）
 - 创建必要的目录（`data/`、`public/images/`）
 - 执行 `docker-compose build` 构建镜像
 
-2. **启动服务**
+1. **启动服务**
 
 ```bash
 docker compose up -d
 ```
 
-3. **查看日志**
+1. **查看日志**
 
 ```bash
 docker compose logs -f
 ```
 
-4. **停止服务**
+1. **停止服务**
 
 ```bash
 docker compose down
@@ -312,7 +325,7 @@ mkdir -p data public/images
 docker build -t antigravity2api .
 ```
 
-2. **运行容器**
+1. **运行容器**
 
 ```bash
 docker run -d \
@@ -330,7 +343,7 @@ docker run -d \
   antigravity2api
 ```
 
-3. **查看日志**
+1. **查看日志**
 
 ```bash
 docker logs -f antigravity2api
@@ -356,40 +369,42 @@ docker logs -f antigravity2api
 ghcr.io/liuw1535/antigravity2api-nodejs
 ```
 
-2. **配置环境变量**
+1. **配置环境变量**
 
 在服务设置中添加以下环境变量：
 
-| 环境变量 | 说明 | 示例值 |
-|--------|------|--------|
-| `API_KEY` | API 认证密钥 | `sk-your-api-key` |
-| `ADMIN_USERNAME` | 管理员用户名 | `admin` |
-| `ADMIN_PASSWORD` | 管理员密码 | `your-secure-password` |
-| `JWT_SECRET` | JWT 密钥 | `your-jwt-secret-key` |
+| 环境变量         | 说明             | 示例值                           |
+| ---------------- | ---------------- | -------------------------------- |
+| `API_KEY`        | API 认证密钥     | `sk-your-api-key`                |
+| `ADMIN_USERNAME` | 管理员用户名     | `admin`                          |
+| `ADMIN_PASSWORD` | 管理员密码       | `your-secure-password`           |
+| `JWT_SECRET`     | JWT 密钥         | `your-jwt-secret-key`            |
 | `IMAGE_BASE_URL` | 图片服务基础 URL | `https://your-domain.zeabur.app` |
 
 可选环境变量：
+
 - `PROXY`：代理地址
 - `SYSTEM_INSTRUCTION`：系统提示词
 
-3. **配置持久化存储**
+1. **配置持久化存储**
 
 在服务的「Volumes」设置中添加以下挂载点：
 
-| 挂载路径 | 说明 |
-|---------|------|
-| `/app/data` | Token 数据存储 |
+| 挂载路径             | 说明           |
+| -------------------- | -------------- |
+| `/app/data`          | Token 数据存储 |
 | `/app/public/images` | 生成的图片存储 |
 
 ⚠️ **重要提示**：
+
 - 只挂载 `/app/data` 和 `/app/public/images` 这两个目录
 - 不要挂载其他目录（如 `/app/.env`、`/app/config.json` 等），否则会导致必要配置文件被清空，项目无法启动
 
-4. **绑定域名**
+1. **绑定域名**
 
 在服务的「Networking」设置中绑定域名，然后将该域名设置到 `IMAGE_BASE_URL` 环境变量中。
 
-5. **启动服务**
+1. **启动服务**
 
 保存配置后，Zeabur 会自动拉取镜像并启动服务。访问绑定的域名即可使用。
 
@@ -575,26 +590,26 @@ curl http://localhost:8045/v1/chat/completions \
 
 ### 轮询策略说明
 
-| 策略 | 说明 |
-|------|------|
-| `round_robin` | 均衡负载：每次请求后切换到下一个 Token |
+| 策略              | 说明                                                          |
+| ----------------- | ------------------------------------------------------------- |
+| `round_robin`     | 均衡负载：每次请求后切换到下一个 Token                        |
 | `quota_exhausted` | 额度耗尽才切换：持续使用当前 Token 直到额度用完（高性能优化） |
-| `request_count` | 自定义次数：每个 Token 使用指定次数后切换（默认策略） |
+| `request_count`   | 自定义次数：每个 Token 使用指定次数后切换（默认策略）         |
 
 ### 2. .env（敏感配置）
 
 环境变量配置文件，包含敏感信息和可选配置：
 
-| 环境变量 | 说明 | 必填 |
-|--------|------|------|
-| `API_KEY` | API 认证密钥 | ✅ |
-| `ADMIN_USERNAME` | 管理员用户名 | ✅ |
-| `ADMIN_PASSWORD` | 管理员密码 | ✅ |
-| `JWT_SECRET` | JWT 密钥 | ✅ |
-| `PROXY` | 代理地址（如：http://127.0.0.1:7890），也支持系统代理环境变量 
-|`HTTP_PROXY`/`HTTPS_PROXY` | ❌ |
-| `SYSTEM_INSTRUCTION` | 系统提示词 | ❌ |
-| `IMAGE_BASE_URL` | 图片服务基础 URL | ❌ |
+| 环境变量                   | 说明                                                            | 必填 |
+| -------------------------- | --------------------------------------------------------------- | ---- |
+| `API_KEY`                  | API 认证密钥                                                    | ✅    |
+| `ADMIN_USERNAME`           | 管理员用户名                                                    | ✅    |
+| `ADMIN_PASSWORD`           | 管理员密码                                                      | ✅    |
+| `JWT_SECRET`               | JWT 密钥                                                        | ✅    |
+| `PROXY`                    | 代理地址（如：<http://127.0.0.1:7890），也支持系统代理环境变量> |
+| `HTTP_PROXY`/`HTTPS_PROXY` | ❌                                                               |
+| `SYSTEM_INSTRUCTION`       | 系统提示词                                                      | ❌    |
+| `IMAGE_BASE_URL`           | 图片服务基础 URL                                                | ❌    |
 
 完整配置示例请参考 `.env.example` 文件。
 
@@ -714,6 +729,7 @@ npm run docker:build
 对于 Pro 订阅账号，可以跳过 API 验证直接使用随机生成的 ProjectId：
 
 1. 在 `config.json` 文件中设置：
+
 ```json
 {
   "other": {
@@ -722,9 +738,9 @@ npm run docker:build
 }
 ```
 
-2. 运行 `npm run login` 登录时会自动使用随机生成的 ProjectId
+1. 运行 `npm run login` 登录时会自动使用随机生成的 ProjectId
 
-3. 已有账号也会在使用时自动生成随机 ProjectId
+2. 已有账号也会在使用时自动生成随机 ProjectId
 
 注意：此功能仅适用于 Pro 订阅账号。官方已修复免费账号使用随机 ProjectId 的漏洞。
 
@@ -736,6 +752,7 @@ npm run docker:build
 2. **无资格的账号**：自动生成随机 ProjectId，避免添加失败
 
 这一机制确保了：
+
 - 无论账号是否有 Pro 订阅，都能成功添加 Token
 - 自动降级处理，无需手动干预
 - 不会因为资格校验失败而阻止登录流程
@@ -756,6 +773,7 @@ messages = [{role: user, content: 你好}]
 ```
 
 这一设计：
+
 - 兼容 OpenAI 的多 system 消息格式
 - 充分利用 Antigravity 的 SystemInstruction 功能
 - 确保系统提示词的完整性和优先级
@@ -779,15 +797,15 @@ messages = [{role: user, content: 你好}]
 }
 ```
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `max_tokens` | 最大输出 token 数 | 32000 |
-| `temperature` | 温度 (0.0-1.0) | 1 |
-| `top_p` | Top-P 采样 | 1 |
-| `top_k` | Top-K 采样 | 50 |
-| `thinking_budget` | 思考预算 (1024-32000) | 1024 |
-| `reasoning_effort` | 思考强度 (`low`/`medium`/`high`) | - |
-| `response_format` | 支持响应格式 (`{ "type": "json_object" }`，仅 Gemini 模型支持) | - |
+| 参数               | 说明                                                           | 默认值 |
+| ------------------ | -------------------------------------------------------------- | ------ |
+| `max_tokens`       | 最大输出 token 数                                              | 32000  |
+| `temperature`      | 温度 (0.0-1.0)                                                 | 1      |
+| `top_p`            | Top-P 采样                                                     | 1      |
+| `top_k`            | Top-K 采样                                                     | 50     |
+| `thinking_budget`  | 思考预算 (1024-32000)                                          | 1024   |
+| `reasoning_effort` | 思考强度 (`low`/`medium`/`high`)                               | -      |
+| `response_format`  | 支持响应格式 (`{ "type": "json_object" }`，仅 Gemini 模型支持) | -      |
 
 ### Claude 格式 (`/v1/messages`)
 
@@ -806,14 +824,14 @@ messages = [{role: user, content: 你好}]
 }
 ```
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `max_tokens` | 最大输出 token 数 | 32000 |
-| `temperature` | 温度 (0.0-1.0) | 1 |
-| `top_p` | Top-P 采样 | 1 |
-| `top_k` | Top-K 采样 | 50 |
-| `thinking.type` | 思考开关 (`enabled`/`disabled`) | - |
-| `thinking.budget_tokens` | 思考预算 (1024-32000) | 1024 |
+| 参数                     | 说明                            | 默认值 |
+| ------------------------ | ------------------------------- | ------ |
+| `max_tokens`             | 最大输出 token 数               | 32000  |
+| `temperature`            | 温度 (0.0-1.0)                  | 1      |
+| `top_p`                  | Top-P 采样                      | 1      |
+| `top_k`                  | Top-K 采样                      | 50     |
+| `thinking.type`          | 思考开关 (`enabled`/`disabled`) | -      |
+| `thinking.budget_tokens` | 思考预算 (1024-32000)           | 1024   |
 
 ### Gemini 格式 (`/v1beta/models/:model:generateContent`)
 
@@ -833,14 +851,14 @@ messages = [{role: user, content: 你好}]
 }
 ```
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `maxOutputTokens` | 最大输出 token 数 | 32000 |
-| `temperature` | 温度 (0.0-1.0) | 1 |
-| `topP` | Top-P 采样 | 1 |
-| `topK` | Top-K 采样 | 50 |
-| `thinkingConfig.includeThoughts` | 是否包含思考内容 | true |
-| `thinkingConfig.thinkingBudget` | 思考预算 (1024-32000) | 1024 |
+| 参数                             | 说明                  | 默认值 |
+| -------------------------------- | --------------------- | ------ |
+| `maxOutputTokens`                | 最大输出 token 数     | 32000  |
+| `temperature`                    | 温度 (0.0-1.0)        | 1      |
+| `topP`                           | Top-P 采样            | 1      |
+| `topK`                           | Top-K 采样            | 50     |
+| `thinkingConfig.includeThoughts` | 是否包含思考内容      | true   |
+| `thinkingConfig.thinkingBudget`  | 思考预算 (1024-32000) | 1024   |
 
 ### 统一参数处理
 
@@ -867,11 +885,11 @@ messages = [{role: user, content: 你好}]
 
 ### reasoning_effort 映射
 
-| 值 | 思考 Token 预算 |
-|---|----------------|
-| `low` | 1024 |
-| `medium` | 16000 |
-| `high` | 32000 |
+| 值       | 思考 Token 预算 |
+| -------- | --------------- |
+| `low`    | 1024            |
+| `medium` | 16000           |
+| `high`   | 32000           |
 
 ## 内存优化
 
@@ -879,11 +897,11 @@ messages = [{role: user, content: 你好}]
 
 ### 优化效果
 
-| 指标 | 优化前 | 优化后 |
-|------|--------|--------|
-| 进程数 | 8+ | 2 |
-| 内存占用 | 100MB+ | 50MB+ |
-| GC 频率 | 高 | 低 |
+| 指标     | 优化前 | 优化后 |
+| -------- | ------ | ------ |
+| 进程数   | 8+     | 2      |
+| 内存占用 | 100MB+ | 50MB+  |
+| GC 频率  | 高     | 低     |
 
 ### 优化手段
 
@@ -897,12 +915,12 @@ messages = [{role: user, content: 你好}]
 
 内存压力阈值根据用户配置的 `memoryThreshold`（MB）动态计算：
 
-| 压力级别 | 阈值比例 | 默认值（100MB 配置） | 行为 |
-|---------|---------|---------------------|------|
-| LOW | 30% | 30MB | 正常运行 |
-| MEDIUM | 60% | 60MB | 轻度清理 |
-| HIGH | 100% | 100MB | 积极清理 + GC |
-| CRITICAL | >100% | >100MB | 紧急清理 + 强制 GC |
+| 压力级别 | 阈值比例 | 默认值（100MB 配置） | 行为               |
+| -------- | -------- | -------------------- | ------------------ |
+| LOW      | 30%      | 30MB                 | 正常运行           |
+| MEDIUM   | 60%      | 60MB                 | 轻度清理           |
+| HIGH     | 100%     | 100MB                | 积极清理 + GC      |
+| CRITICAL | >100%    | >100MB               | 紧急清理 + 强制 GC |
 
 ### 配置
 
@@ -952,18 +970,18 @@ src/utils/converters/
 
 #### 公共函数
 
-| 函数 | 说明 |
-|------|------|
-| `getSignatureContext()` | 获取思维签名和工具签名 |
-| `pushUserMessage()` | 添加用户消息到消息数组 |
-| `findFunctionNameById()` | 根据工具调用 ID 查找函数名 |
-| `pushFunctionResponse()` | 添加函数响应到消息数组 |
-| `createThoughtPart()` | 创建带签名的思维 part |
-| `createFunctionCallPart()` | 创建带签名的函数调用 part |
-| `processToolName()` | 处理工具名称映射 |
-| `pushModelMessage()` | 添加模型消息到消息数组 |
-| `buildRequestBody()` | 构建 Antigravity 请求体 |
-| `mergeSystemInstruction()` | 合并系统指令 |
+| 函数                       | 说明                       |
+| -------------------------- | -------------------------- |
+| `getSignatureContext()`    | 获取思维签名和工具签名     |
+| `pushUserMessage()`        | 添加用户消息到消息数组     |
+| `findFunctionNameById()`   | 根据工具调用 ID 查找函数名 |
+| `pushFunctionResponse()`   | 添加函数响应到消息数组     |
+| `createThoughtPart()`      | 创建带签名的思维 part      |
+| `createFunctionCallPart()` | 创建带签名的函数调用 part  |
+| `processToolName()`        | 处理工具名称映射           |
+| `pushModelMessage()`       | 添加模型消息到消息数组     |
+| `buildRequestBody()`       | 构建 Antigravity 请求体    |
+| `mergeSystemInstruction()` | 合并系统指令               |
 
 ### 参数规范化模块
 
@@ -973,12 +991,12 @@ src/utils/parameterNormalizer.js  # 统一参数处理
 
 将 OpenAI、Claude、Gemini 三种格式的参数统一转换为内部格式：
 
-| 函数 | 说明 |
-|------|------|
+| 函数                          | 说明                   |
+| ----------------------------- | ---------------------- |
 | `normalizeOpenAIParameters()` | 规范化 OpenAI 格式参数 |
 | `normalizeClaudeParameters()` | 规范化 Claude 格式参数 |
 | `normalizeGeminiParameters()` | 规范化 Gemini 格式参数 |
-| `toGenerationConfig()` | 转换为上游 API 格式 |
+| `toGenerationConfig()`        | 转换为上游 API 格式    |
 
 ### 工具转换模块
 
