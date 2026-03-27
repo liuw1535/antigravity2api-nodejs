@@ -118,7 +118,7 @@ npm install
 你也可以手动复制示例文件：
 
 ```bash
-cp .env.example .env
+cp .env.example .env,.
 cp config.json.example config.json
 ```
 

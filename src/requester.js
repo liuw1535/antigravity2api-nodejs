@@ -1,14 +1,15 @@
-import { spawn } from 'child_process';
-import { existsSync, chmodSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { platform, arch } from 'os';
-import zlib from 'zlib';
+import { spawn } from "child_process";
+import { chmodSync, existsSync } from "fs";
+import { arch, platform } from "os";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import zlib from "zlib";
+import { getNextProxyConfig } from "./utils/proxyPool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 检测是否在 pkg 打包环境中运行
-const isPkg = typeof process.pkg !== 'undefined';
+const isPkg = typeof process.pkg !== "undefined";
 
 // gzip 解压辅助函数
 function decompressGzip(buffer) {
@@ -24,7 +25,8 @@ class FingerprintRequester {
   constructor(options = {}) {
     this.binDir = options.binDir || this._detectBinDir();
     this.binaryPath = options.binaryPath || this._detectBinary();
-    this.configPath = options.configPath || join(__dirname, 'bin', 'config.json');
+    this.configPath =
+      options.configPath || join(__dirname, "bin", "config.json");
     this.defaults = {
       timeout: options.timeout || 30, // seconds
       proxy: options.proxy || null,
@@ -36,31 +38,31 @@ class FingerprintRequester {
     // pkg 环境下优先使用可执行文件旁边的 bin 目录
     if (isPkg) {
       const exeDir = dirname(process.execPath);
-      const exeBinDir = join(exeDir, 'bin');
+      const exeBinDir = join(exeDir, "bin");
       if (existsSync(exeBinDir)) {
         return exeBinDir;
       }
       // 其次使用当前工作目录的 bin 目录
-      const cwdBinDir = join(process.cwd(), 'bin');
+      const cwdBinDir = join(process.cwd(), "bin");
       if (existsSync(cwdBinDir)) {
         return cwdBinDir;
       }
     }
     // 开发环境
-    return join(__dirname, 'bin');
+    return join(__dirname, "bin");
   }
 
   _detectBinary() {
     const platformMap = {
-      win32: 'windows',
-      linux: 'linux',
-      android: 'android',
-      darwin: 'linux', // fallback to linux for macOS
+      win32: "windows",
+      linux: "linux",
+      android: "android",
+      darwin: "linux", // fallback to linux for macOS
     };
 
     const archMap = {
-      x64: 'amd64',
-      arm64: 'arm64',
+      x64: "amd64",
+      arm64: "arm64",
     };
 
     const os = platformMap[platform()];
@@ -70,7 +72,7 @@ class FingerprintRequester {
       throw new Error(`Unsupported platform: ${platform()} ${arch()}`);
     }
 
-    const ext = platform() === 'win32' ? '.exe' : '';
+    const ext = platform() === "win32" ? ".exe" : "";
     const binaryName = `fingerprint_${os}_${cpuArch}${ext}`;
     const binaryPath = join(this.binDir, binaryName);
 
@@ -79,7 +81,7 @@ class FingerprintRequester {
     }
 
     // 确保二进制文件有执行权限（非 Windows 平台）
-    if (platform() !== 'win32') {
+    if (platform() !== "win32") {
       try {
         chmodSync(binaryPath, 0o755);
       } catch (e) {
@@ -92,13 +94,13 @@ class FingerprintRequester {
 
   async request(config) {
     const {
-      method = 'GET',
+      method = "GET",
       url,
       headers = {},
-      data = '',
+      data = "",
       timeout,
       proxy,
-      responseType = 'text',
+      responseType = "text",
       onDownloadProgress,
       validateStatus = (status) => status >= 200 && status < 300,
       signal,
@@ -106,14 +108,14 @@ class FingerprintRequester {
     } = config;
 
     if (!url) {
-      throw new Error('URL is required');
+      throw new Error("URL is required");
     }
 
     const requestPayload = {
       method: method.toUpperCase(),
       url,
       headers,
-      body: typeof data === 'string' ? data : JSON.stringify(data),
+      body: typeof data === "string" ? data : JSON.stringify(data),
       config_path: this.configPath,
     };
 
@@ -127,13 +129,14 @@ class FingerprintRequester {
     }
 
     // Add proxy if specified
-    const proxyUrl = proxy || this.defaults.proxy;
-    if (proxyUrl) {
-      const proxyType = proxyUrl.startsWith('socks') ? 'socks5' : 'http';
+    const proxyConfig = getNextProxyConfig(
+      proxy !== undefined ? proxy : this.defaults.proxy,
+    );
+    if (proxyConfig) {
       requestPayload.proxy = {
         enabled: true,
-        type: proxyType,
-        url: proxyUrl,
+        type: proxyConfig.protocol,
+        url: proxyConfig.url,
       };
     }
 
@@ -143,33 +146,33 @@ class FingerprintRequester {
       let headersParsed = false;
       let responseHeaders = {};
       let responseStatus = 200;
-      let responseStatusText = 'OK';
+      let responseStatusText = "OK";
       let headerBuffer = null; // 使用 Buffer 而非字符串，保留二进制数据完整性
       let bodyChunks = [];
       let totalLoaded = 0;
-      let stderrData = '';
+      let stderrData = "";
 
       const timeoutId = setTimeout(() => {
         proc.kill();
-        const error = new Error('Request timeout');
-        error.code = 'ECONNABORTED';
+        const error = new Error("Request timeout");
+        error.code = "ECONNABORTED";
         error.config = config;
         reject(error);
       }, timeoutSec * 1000);
 
       // Support request cancellation
       if (signal) {
-        signal.addEventListener('abort', () => {
+        signal.addEventListener("abort", () => {
           proc.kill();
           clearTimeout(timeoutId);
-          const error = new Error('Request aborted');
-          error.code = 'ERR_CANCELED';
+          const error = new Error("Request aborted");
+          error.code = "ERR_CANCELED";
           error.config = config;
           reject(error);
         });
       }
 
-      proc.stdout.on('data', (chunk) => {
+      proc.stdout.on("data", (chunk) => {
         if (!headersParsed) {
           // 使用 Buffer 操作保留二进制数据完整性
           if (!headerBuffer) {
@@ -179,22 +182,25 @@ class FingerprintRequester {
           }
 
           // 使用 Buffer.indexOf 查找 \r\n\r\n 的位置
-          const separator = Buffer.from('\r\n\r\n');
+          const separator = Buffer.from("\r\n\r\n");
           const headerEndIndex = headerBuffer.indexOf(separator);
 
           if (headerEndIndex !== -1) {
             // Parse headers (header 部分是纯文本，可以安全转换)
-            const headerPart = headerBuffer.slice(0, headerEndIndex).toString('utf8');
+            const headerPart = headerBuffer
+              .slice(0, headerEndIndex)
+              .toString("utf8");
             const bodyPart = headerBuffer.slice(headerEndIndex + 4); // 保持为 Buffer
 
-            const lines = headerPart.split('\r\n');
+            const lines = headerPart.split("\r\n");
             const statusMatch = lines[0].match(/HTTP\/[\d.]+ (\d+) (.+)/);
             responseStatus = statusMatch ? parseInt(statusMatch[1]) : 200;
-            responseStatusText = statusMatch ? statusMatch[2] : 'OK';
+            responseStatusText = statusMatch ? statusMatch[2] : "OK";
 
             for (let i = 1; i < lines.length; i++) {
-              const [key, ...valueParts] = lines[i].split(': ');
-              if (key) responseHeaders[key.toLowerCase()] = valueParts.join(': ');
+              const [key, ...valueParts] = lines[i].split(": ");
+              if (key)
+                responseHeaders[key.toLowerCase()] = valueParts.join(": ");
             }
 
             headersParsed = true;
@@ -210,8 +216,8 @@ class FingerprintRequester {
               if (onDownloadProgress) {
                 onDownloadProgress({
                   loaded: totalLoaded,
-                  total: parseInt(responseHeaders['content-length']) || 0,
-                  chunk: bodyPart.toString('utf8'),
+                  total: parseInt(responseHeaders["content-length"]) || 0,
+                  chunk: bodyPart.toString("utf8"),
                   status: responseStatus,
                   headers: responseHeaders,
                 });
@@ -225,8 +231,8 @@ class FingerprintRequester {
           if (onDownloadProgress) {
             onDownloadProgress({
               loaded: totalLoaded,
-              total: parseInt(responseHeaders['content-length']) || 0,
-              chunk: chunk.toString('utf8'),
+              total: parseInt(responseHeaders["content-length"]) || 0,
+              chunk: chunk.toString("utf8"),
               status: responseStatus,
               headers: responseHeaders,
             });
@@ -234,16 +240,19 @@ class FingerprintRequester {
         }
       });
 
-      proc.stderr.on('data', (chunk) => {
+      proc.stderr.on("data", (chunk) => {
         stderrData += chunk.toString();
       });
 
-      proc.on('close', async (code) => {
+      proc.on("close", async (code) => {
         clearTimeout(timeoutId);
         this.activeProcesses.delete(proc);
 
         if (code !== 0) {
-          let errorInfo = { error: `Process exited with code ${code}`, error_type: 'UNKNOWN_ERROR' };
+          let errorInfo = {
+            error: `Process exited with code ${code}`,
+            error_type: "UNKNOWN_ERROR",
+          };
           if (stderrData) {
             try {
               errorInfo = JSON.parse(stderrData);
@@ -252,7 +261,12 @@ class FingerprintRequester {
             }
           }
           const error = new Error(errorInfo.error);
-          error.code = code === 3 ? 'ECONNABORTED' : code === 4 ? 'ERR_CONFIG' : 'ERR_NETWORK';
+          error.code =
+            code === 3
+              ? "ECONNABORTED"
+              : code === 4
+                ? "ERR_CONFIG"
+                : "ERR_NETWORK";
           error.errorType = errorInfo.error_type;
           error.exitCode = code;
           error.config = config;
@@ -261,19 +275,26 @@ class FingerprintRequester {
 
         try {
           let bodyBuffer = Buffer.concat(bodyChunks);
-          
+
           // 检查是否需要 gzip 解压
           // 同时验证数据确实是 gzip 格式（魔数 0x1f 0x8b），避免二进制已自动解压但保留 header 的情况
-          const contentEncoding = responseHeaders['content-encoding'] || '';
-          const isGzipData = bodyBuffer.length >= 2 && bodyBuffer[0] === 0x1f && bodyBuffer[1] === 0x8b;
-          if (!skipGzipDecompress && contentEncoding.toLowerCase().includes('gzip') && isGzipData) {
+          const contentEncoding = responseHeaders["content-encoding"] || "";
+          const isGzipData =
+            bodyBuffer.length >= 2 &&
+            bodyBuffer[0] === 0x1f &&
+            bodyBuffer[1] === 0x8b;
+          if (
+            !skipGzipDecompress &&
+            contentEncoding.toLowerCase().includes("gzip") &&
+            isGzipData
+          ) {
             bodyBuffer = await decompressGzip(bodyBuffer);
           }
-          
-          const body = bodyBuffer.toString('utf8');
+
+          const body = bodyBuffer.toString("utf8");
           let parsedData = body;
-          
-          if (responseType === 'json') {
+
+          if (responseType === "json") {
             try {
               parsedData = JSON.parse(body);
             } catch (e) {
@@ -288,28 +309,31 @@ class FingerprintRequester {
             headers: responseHeaders,
             config,
           };
-          
+
           if (!validateStatus(responseStatus)) {
-            const error = new Error(`Request failed with status code ${responseStatus}`);
-            error.code = responseStatus >= 500 ? 'ERR_BAD_RESPONSE' : 'ERR_BAD_REQUEST';
+            const error = new Error(
+              `Request failed with status code ${responseStatus}`,
+            );
+            error.code =
+              responseStatus >= 500 ? "ERR_BAD_RESPONSE" : "ERR_BAD_REQUEST";
             error.response = response;
             error.config = config;
             return reject(error);
           }
-          
+
           resolve(response);
         } catch (err) {
           const error = new Error(`Response processing failed: ${err.message}`);
-          error.code = 'ERR_RESPONSE_PROCESSING';
+          error.code = "ERR_RESPONSE_PROCESSING";
           error.config = config;
           reject(error);
         }
       });
 
-      proc.on('error', (err) => {
+      proc.on("error", (err) => {
         clearTimeout(timeoutId);
         const error = new Error(`Failed to spawn process: ${err.message}`);
-        error.code = 'ERR_SPAWN';
+        error.code = "ERR_SPAWN";
         error.config = config;
         reject(error);
       });
@@ -320,38 +344,40 @@ class FingerprintRequester {
   }
 
   async get(url, config = {}) {
-    return this.request({ ...config, method: 'GET', url });
+    return this.request({ ...config, method: "GET", url });
   }
 
   async post(url, data, config = {}) {
-    return this.request({ ...config, method: 'POST', url, data });
+    return this.request({ ...config, method: "POST", url, data });
   }
 
   async put(url, data, config = {}) {
-    return this.request({ ...config, method: 'PUT', url, data });
+    return this.request({ ...config, method: "PUT", url, data });
   }
 
   async delete(url, config = {}) {
-    return this.request({ ...config, method: 'DELETE', url });
+    return this.request({ ...config, method: "DELETE", url });
   }
 
   async patch(url, data, config = {}) {
-    return this.request({ ...config, method: 'PATCH', url, data });
+    return this.request({ ...config, method: "PATCH", url, data });
   }
 
   async head(url, config = {}) {
-    return this.request({ ...config, method: 'HEAD', url });
+    return this.request({ ...config, method: "HEAD", url });
   }
 
   async options(url, config = {}) {
-    return this.request({ ...config, method: 'OPTIONS', url });
+    return this.request({ ...config, method: "OPTIONS", url });
   }
 
   stream(config) {
     // Ensure onDownloadProgress is set for streaming
     const onProgress = config.onData || config.onDownloadProgress;
     if (!onProgress) {
-      console.warn('[stream] No onData or onDownloadProgress callback provided');
+      console.warn(
+        "[stream] No onData or onDownloadProgress callback provided",
+      );
     }
     return this.request({
       ...config,
@@ -367,11 +393,13 @@ class FingerprintRequester {
    */
   _buildConfigFromOptions(url, options = {}, isStream = false) {
     return {
-      method: options.method || 'GET',
+      method: options.method || "GET",
       url,
       headers: options.headers || {},
-      data: options.body || '',
-      timeout: options.timeout_ms ? Math.ceil(options.timeout_ms / 1000) : this.defaults.timeout,
+      data: options.body || "",
+      timeout: options.timeout_ms
+        ? Math.ceil(options.timeout_ms / 1000)
+        : this.defaults.timeout,
       proxy: options.proxy || this.defaults.proxy,
       skipGzipDecompress: isStream,
     };
@@ -385,7 +413,7 @@ class FingerprintRequester {
     const config = this._buildConfigFromOptions(url, options, false);
 
     const response = await this.request(config);
-    
+
     // 返回兼容 AntigravityRequester 的响应对象
     return {
       ok: response.status >= 200 && response.status < 300,
@@ -396,14 +424,23 @@ class FingerprintRequester {
       redirected: false,
       _data: response.data,
       async text() {
-        return typeof this._data === 'string' ? this._data : JSON.stringify(this._data);
+        return typeof this._data === "string"
+          ? this._data
+          : JSON.stringify(this._data);
       },
       async json() {
-        return typeof this._data === 'string' ? JSON.parse(this._data) : this._data;
+        return typeof this._data === "string"
+          ? JSON.parse(this._data)
+          : this._data;
       },
       async buffer() {
-        return Buffer.from(typeof this._data === 'string' ? this._data : JSON.stringify(this._data), 'utf8');
-      }
+        return Buffer.from(
+          typeof this._data === "string"
+            ? this._data
+            : JSON.stringify(this._data),
+          "utf8",
+        );
+      },
     };
   }
 
@@ -425,7 +462,10 @@ class FingerprintRequester {
             streamResponse.headers = new Map(Object.entries(headers));
           }
           if (streamResponse._onStart) {
-            streamResponse._onStart({ status, headers: streamResponse.headers });
+            streamResponse._onStart({
+              status,
+              headers: streamResponse.headers,
+            });
           }
         }
         if (streamResponse._onData) {
@@ -444,7 +484,7 @@ class FingerprintRequester {
         // 请求完成后设置最终 headers
         streamResponse.headers = new Map(Object.entries(response.headers));
         streamResponse._ended = true;
-        streamResponse._finalText = streamResponse.chunks.join('');
+        streamResponse._finalText = streamResponse.chunks.join("");
         if (streamResponse._textPromiseResolve) {
           streamResponse._textPromiseResolve(streamResponse._finalText);
         }
@@ -469,7 +509,7 @@ class FingerprintRequester {
   }
 
   close() {
-    this.activeProcesses.forEach(proc => proc.kill());
+    this.activeProcesses.forEach((proc) => proc.kill());
     this.activeProcesses.clear();
   }
 }
@@ -518,7 +558,7 @@ class StreamResponse {
   async text() {
     if (this._ended) {
       if (this._error) throw this._error;
-      return this._finalText || '';
+      return this._finalText || "";
     }
     return new Promise((resolve, reject) => {
       this._textPromiseResolve = resolve;

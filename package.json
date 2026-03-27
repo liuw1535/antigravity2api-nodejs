@@ -34,8 +34,11 @@
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "http-proxy-agent": "^8.0.0",
+    "https-proxy-agent": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
     "protobufjs": "^8.0.0",
+    "socks-proxy-agent": "^9.0.0",
     "ws": "^8.19.0"
   },
   "devDependencies": {

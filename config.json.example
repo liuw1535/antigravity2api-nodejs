@@ -53,6 +53,8 @@
   "other": {
     "timeout": 300000,
     "retryTimes": 10,
+    "proxyProtocol": "http",
+    "proxyPool": "",
     "forceIPv4": false,
     "skipProjectIdFetch": false,
     "useNativeAxios": false,

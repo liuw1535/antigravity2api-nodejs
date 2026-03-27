@@ -1457,8 +1457,90 @@ html.tab-logs .content {
     max-width: 480px;
 }
 
+.form-modal.oauth-modal .modal-content {
+    max-width: 720px;
+}
+
 .form-modal input {
     margin-bottom: 0.75rem;
+}
+
+.form-modal .oauth-generator-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.form-modal .oauth-generated-panel {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: rgba(15, 23, 42, 0.03);
+}
+
+.form-modal .oauth-generated-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.form-modal .oauth-generated-summary {
+    font-size: 0.85rem;
+    color: var(--text-light);
+}
+
+.form-modal .oauth-generated-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.form-modal .oauth-generated-item {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.form-modal .oauth-generated-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.form-modal .oauth-generated-item-header span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.form-modal .oauth-generated-item textarea {
+    margin-bottom: 0;
+    min-height: 72px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.form-modal .oauth-generated-copy-btn {
+    flex: none;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.form-modal .oauth-generated-empty {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--text-light);
 }
 
 .form-modal .form-row {
@@ -1485,6 +1567,16 @@ html.tab-logs .content {
 
 .form-modal .oauth-steps p:last-child {
     margin-bottom: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    .form-modal .oauth-generated-panel {
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .form-modal .oauth-generated-item {
+        background: rgba(15, 23, 42, 0.45);
+    }
 }
 
 @keyframes fadeIn {
