@@ -55,6 +55,7 @@
     "retryTimes": 10,
     "proxyProtocol": "http",
     "proxyPool": "",
+    "proxyAllRequests": false,
     "forceIPv4": false,
     "skipProjectIdFetch": false,
     "useNativeAxios": false,

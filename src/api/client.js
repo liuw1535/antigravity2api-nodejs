@@ -232,13 +232,15 @@ function buildRequesterConfig(
   method = "POST",
   proxy = null,
 ) {
+  const effectiveProxy =
+    proxy || (config.proxy?.allRequests ? config.proxy : null);
   const reqConfig = {
     method: method,
     headers,
     timeout_ms: config.timeout,
   };
-  if (proxy) {
-    reqConfig.proxy = proxy;
+  if (effectiveProxy) {
+    reqConfig.proxy = effectiveProxy;
   }
   if (body !== null) {
     // 判断是否为二进制数据

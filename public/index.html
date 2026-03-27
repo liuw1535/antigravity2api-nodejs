@@ -724,6 +724,20 @@
                         />
                       </div>
                       <div class="form-row-inline">
+                        <div class="form-group compact switch-group">
+                          <label
+                            >全代理模式
+                            <span
+                              class="help-tip"
+                              data-tooltip="开启后所有上游请求都走代理；关闭后仅在向 LLM 发送消息时走代理。"
+                              >?</span
+                            ></label
+                          >
+                          <label class="switch">
+                            <input type="checkbox" name="PROXY_ALL_REQUESTS" />
+                            <span class="slider"></span>
+                          </label>
+                        </div>
                         <div class="form-group compact">
                           <label>代理协议</label>
                           <select name="PROXY_PROTOCOL">

@@ -91,7 +91,11 @@ export function buildAxiosRequestConfig({
   useChunked = false,
   proxy = null,
 }) {
-  const proxyConfig = proxy ? getNextProxyConfig(proxy) : null;
+  const effectiveProxy =
+    proxy || (config.proxy?.allRequests ? config.proxy : null);
+  const proxyConfig = effectiveProxy
+    ? getNextProxyConfig(effectiveProxy)
+    : null;
   const agents = proxyConfig
     ? getProxyAgents(proxyConfig)
     : { httpAgent, httpsAgent };

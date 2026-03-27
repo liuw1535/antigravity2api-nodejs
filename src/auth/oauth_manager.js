@@ -47,13 +47,15 @@ function buildRequesterConfig(
   method = "POST",
   proxy = null,
 ) {
+  const effectiveProxy =
+    proxy || (config.proxy?.allRequests ? config.proxy : null);
   const reqConfig = {
     method,
     headers,
     timeout_ms: config.timeout,
   };
-  if (proxy) {
-    reqConfig.proxy = proxy;
+  if (effectiveProxy) {
+    reqConfig.proxy = effectiveProxy;
   }
   if (body !== null) {
     reqConfig.body = typeof body === "string" ? body : JSON.stringify(body);

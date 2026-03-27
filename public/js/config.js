@@ -204,6 +204,9 @@ async function loadConfig() {
           );
         if (form.elements["PROXY_POOL"])
           form.elements["PROXY_POOL"].value = json.other.proxyPool ?? "";
+        if (form.elements["PROXY_ALL_REQUESTS"])
+          form.elements["PROXY_ALL_REQUESTS"].checked =
+            json.other.proxyAllRequests === true;
         if (form.elements["SKIP_PROJECT_ID_FETCH"])
           form.elements["SKIP_PROJECT_ID_FETCH"].checked =
             json.other.skipProjectIdFetch || false;
@@ -418,6 +421,8 @@ async function saveConfig(e) {
     .map((line) => line.trim())
     .filter(Boolean)
     .join("\n");
+  jsonConfig.other.proxyAllRequests =
+    form.elements["PROXY_ALL_REQUESTS"]?.checked || false;
   jsonConfig.other.useContextSystemPrompt =
     form.elements["USE_CONTEXT_SYSTEM_PROMPT"]?.checked || false;
   jsonConfig.other.mergeSystemPrompt =

@@ -247,11 +247,13 @@ export function getProxyConfig(jsonConfig = {}) {
     jsonConfig.other?.proxyProtocol || "http",
   );
   const proxyPool = normalizeProxyPoolInput(jsonConfig.other?.proxyPool || "");
+  const allRequests = jsonConfig.other?.proxyAllRequests === true;
 
   if (proxyPool) {
     return {
       enabled: true,
       mode: "pool",
+      allRequests,
       protocol: proxyProtocol,
       poolRaw: proxyPool,
       url: null,
@@ -263,6 +265,7 @@ export function getProxyConfig(jsonConfig = {}) {
     return {
       enabled: true,
       mode: "single",
+      allRequests,
       protocol: proxyProtocol,
       poolRaw: "",
       url: process.env.PROXY,
@@ -283,6 +286,7 @@ export function getProxyConfig(jsonConfig = {}) {
     return {
       enabled: true,
       mode: "system",
+      allRequests,
       protocol: systemProxy.startsWith("socks")
         ? "socks5"
         : systemProxy.startsWith("https://")
@@ -296,6 +300,7 @@ export function getProxyConfig(jsonConfig = {}) {
   return {
     enabled: false,
     mode: "none",
+    allRequests,
     protocol: proxyProtocol,
     poolRaw: "",
     url: null,
