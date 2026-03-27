@@ -4,7 +4,11 @@ import { arch, platform } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import zlib from "zlib";
-import { getNextProxyConfig } from "./utils/proxyPool.js";
+import logger from "./utils/logger.js";
+import {
+  formatProxyRequestInfo,
+  getNextProxyConfig,
+} from "./utils/proxyPool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -133,6 +137,9 @@ class FingerprintRequester {
       proxy !== undefined ? proxy : this.defaults.proxy,
     );
     if (proxyConfig) {
+      if (proxyConfig.isPool) {
+        logger.info(`[ProxyPool] ${formatProxyRequestInfo(proxyConfig, url)}`);
+      }
       requestPayload.proxy = {
         enabled: true,
         type: proxyConfig.protocol,

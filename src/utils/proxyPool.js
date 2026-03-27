@@ -200,7 +200,12 @@ export function getNextProxyConfig(proxyOverride = undefined) {
   }
 
   if (entries.length === 1) {
-    return entries[0];
+    return {
+      ...entries[0],
+      index: 0,
+      poolSize: 1,
+      isPool: false,
+    };
   }
 
   const protocol = normalizeProxyProtocol(
@@ -228,5 +233,18 @@ export function getNextProxyConfig(proxyOverride = undefined) {
   return {
     ...selected,
     index,
+    poolSize: entries.length,
+    isPool: true,
   };
+}
+
+export function formatProxyRequestInfo(proxyConfig, targetUrl = "") {
+  if (!proxyConfig) return "";
+
+  const proxyLabel = proxyConfig.isPool
+    ? `代理池[${(proxyConfig.index ?? 0) + 1}/${proxyConfig.poolSize || 1}]`
+    : "代理";
+  const targetLabel = targetUrl ? ` -> ${targetUrl}` : "";
+
+  return `${proxyLabel} ${proxyConfig.url}${targetLabel}`;
 }

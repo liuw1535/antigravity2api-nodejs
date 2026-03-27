@@ -7,7 +7,8 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Readable } from "stream";
 import config from "../config/config.js";
-import { getNextProxyConfig } from "./proxyPool.js";
+import logger from "./logger.js";
+import { formatProxyRequestInfo, getNextProxyConfig } from "./proxyPool.js";
 
 // ==================== DNS & 代理统一配置 ====================
 
@@ -94,6 +95,10 @@ export function buildAxiosRequestConfig({
   const agents = proxyConfig
     ? getProxyAgents(proxyConfig)
     : { httpAgent, httpsAgent };
+
+  if (proxyConfig?.isPool) {
+    logger.info(`[ProxyPool] ${formatProxyRequestInfo(proxyConfig, url)}`);
+  }
 
   const axiosConfig = {
     method,
