@@ -10,6 +10,7 @@
     <!-- 防止页面闪烁：在渲染前根据Tab状态设置初始显示 -->
     <script>
       (function () {
+        window.__STATIC_VERSION__ = "20260327-1";
         // 初始状态：auth-checking 表示正在验证登录状态
         // 验证完成后会变成 auth-ready + logged-in 或 auth-ready
         var currentTab = localStorage.getItem("currentTab") || "tokens";
@@ -206,7 +207,15 @@
       }
     </style>
     <!-- 主样式表 - 优先加载 -->
-    <link rel="stylesheet" href="style.css" />
+    <script>
+      (function () {
+        var version = window.__STATIC_VERSION__ || "dev";
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "style.css?v=" + encodeURIComponent(version);
+        document.head.appendChild(link);
+      })();
+    </script>
     <!-- 预连接字体服务器 -->
     <link rel="preconnect" href="https://font.sec.miui.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
@@ -1238,15 +1247,29 @@
     </div>
 
     <!-- 按依赖顺序加载模块 -->
-    <script src="js/utils.js" defer></script>
-    <script src="js/ui.js" defer></script>
-    <script src="js/auth.js" defer></script>
-    <script src="js/quota.js" defer></script>
-    <script src="js/tokens.js" defer></script>
-    <script src="js/geminicli.js" defer></script>
-    <script src="js/config.js" defer></script>
-    <script src="js/security.js" defer></script>
-    <script src="js/logs.js" defer></script>
-    <script src="js/main.js" defer></script>
+    <script>
+      (function () {
+        var version = window.__STATIC_VERSION__ || "dev";
+        var scripts = [
+          "js/utils.js",
+          "js/ui.js",
+          "js/auth.js",
+          "js/quota.js",
+          "js/tokens.js",
+          "js/geminicli.js",
+          "js/config.js",
+          "js/security.js",
+          "js/logs.js",
+          "js/main.js",
+        ];
+
+        scripts.forEach(function (src) {
+          var script = document.createElement("script");
+          script.src = src + "?v=" + encodeURIComponent(version);
+          script.defer = true;
+          document.body.appendChild(script);
+        });
+      })();
+    </script>
   </body>
 </html>
