@@ -89,9 +89,9 @@ export function buildAxiosRequestConfig({
   timeout = config.timeout,
   responseType,
   useChunked = false,
-  proxy = undefined,
+  proxy = null,
 }) {
-  const proxyConfig = getNextProxyConfig(proxy);
+  const proxyConfig = proxy ? getNextProxyConfig(proxy) : null;
   const agents = proxyConfig
     ? getProxyAgents(proxyConfig)
     : { httpAgent, httpsAgent };

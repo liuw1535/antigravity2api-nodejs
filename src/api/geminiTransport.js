@@ -1,29 +1,41 @@
-import { httpRequest, httpStreamRequest } from '../utils/httpClient.js';
+import { httpRequest, httpStreamRequest } from "../utils/httpClient.js";
 
-export async function runAxiosSseStream({ url, headers, data, timeout, processor } = {}) {
+export async function runAxiosSseStream({
+  url,
+  headers,
+  data,
+  timeout,
+  proxy = null,
+  processor,
+} = {}) {
   const response = await httpStreamRequest({
-    method: 'POST',
+    method: "POST",
     url,
     headers,
     data,
-    timeout
+    timeout,
+    proxy,
   });
 
-  response.data.on('data', (chunk) => {
+  response.data.on("data", (chunk) => {
     processor.processChunk(chunk);
   });
 
   await new Promise((resolve, reject) => {
-    response.data.on('end', () => {
+    response.data.on("end", () => {
       processor.close();
       resolve();
     });
-    response.data.on('error', reject);
+    response.data.on("error", reject);
   });
 }
 
-export async function runNativeSseStream({ streamResponse, processor, onErrorChunk } = {}) {
-  let errorBody = '';
+export async function runNativeSseStream({
+  streamResponse,
+  processor,
+  onErrorChunk,
+} = {}) {
+  let errorBody = "";
   let statusCode = null;
 
   await new Promise((resolve, reject) => {
@@ -58,43 +70,51 @@ export async function postJsonAndParse({
   headers,
   body,
   timeout,
+  proxy = null,
   requesterConfig,
   dumpId,
   dumpFinalRawResponse,
-  rawFormat = 'json'
+  rawFormat = "json",
 } = {}) {
   if (useAxios) {
     if (dumpId) {
       const resp = await httpRequest({
-        method: 'POST',
+        method: "POST",
         url,
         headers,
         data: body,
         timeout,
-        responseType: 'text'
+        proxy,
+        responseType: "text",
       });
-      const rawText = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data, null, 2);
+      const rawText =
+        typeof resp.data === "string"
+          ? resp.data
+          : JSON.stringify(resp.data, null, 2);
       await dumpFinalRawResponse(dumpId, rawText, rawFormat);
       return JSON.parse(rawText);
     }
 
-    return (await httpRequest({
-      method: 'POST',
-      url,
-      headers,
-      data: body,
-      timeout
-    })).data;
+    return (
+      await httpRequest({
+        method: "POST",
+        url,
+        headers,
+        data: body,
+        timeout,
+        proxy,
+      })
+    ).data;
   }
 
   if (!requester) {
-    throw new Error('native requester is required when useAxios=false');
+    throw new Error("native requester is required when useAxios=false");
   }
 
   const response = await requester.antigravity_fetch(url, requesterConfig);
   if (response.status !== 200) {
     const errorBody = await response.text();
-    if (dumpId) await dumpFinalRawResponse(dumpId, errorBody, 'txt');
+    if (dumpId) await dumpFinalRawResponse(dumpId, errorBody, "txt");
     throw { status: response.status, message: errorBody };
   }
 
