@@ -136,6 +136,7 @@ curl http://localhost:8045/v1/chat/completions \
 ```
 
 **响应示例**：
+
 ```json
 {
   "choices": [{
@@ -148,23 +149,24 @@ curl http://localhost:8045/v1/chat/completions \
 ```
 
 **注意**：
+
 - 生成的图片会保存到 `public/images/` 目录
 - 需要配置 `IMAGE_BASE_URL` 环境变量以返回正确的图片 URL
 
 ## 请求参数说明
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `model` | string | ✅ | 模型名称 |
-| `messages` | array | ✅ | 对话消息列表 |
-| `stream` | boolean | ❌ | 是否流式响应，默认 false |
-| `temperature` | number | ❌ | 温度参数，默认 1 |
-| `top_p` | number | ❌ | Top P 参数，默认 1 |
-| `top_k` | number | ❌ | Top K 参数，默认 50 |
-| `max_tokens` | number | ❌ | 最大 token 数，默认 32000 |
-| `thinking_budget` | number | ❌ | 思考预算（仅对思考模型生效），可为 0 或 1024-32000，默认 1024（0 表示关闭思考预算限制） |
-| `reasoning_effort` | string | ❌ | 思维链强度（OpenAI 格式），可选值：`low`(1024)、`medium`(16000)、`high`(32000) |
-| `tools` | array | ❌ | 工具列表（Function Calling） |
+| 参数               | 类型    | 必填 | 说明                                                                                    |
+| ------------------ | ------- | ---- | --------------------------------------------------------------------------------------- |
+| `model`            | string  | ✅    | 模型名称                                                                                |
+| `messages`         | array   | ✅    | 对话消息列表                                                                            |
+| `stream`           | boolean | ❌    | 是否流式响应，默认 false                                                                |
+| `temperature`      | number  | ❌    | 温度参数，默认 1                                                                        |
+| `top_p`            | number  | ❌    | Top P 参数，默认 1                                                                      |
+| `top_k`            | number  | ❌    | Top K 参数，默认 50                                                                     |
+| `max_tokens`       | number  | ❌    | 最大 token 数，默认 32000                                                               |
+| `thinking_budget`  | number  | ❌    | 思考预算（仅对思考模型生效），可为 0 或 1024-32000，默认 1024（0 表示关闭思考预算限制） |
+| `reasoning_effort` | string  | ❌    | 思维链强度（OpenAI 格式），可选值：`low`(1024)、`medium`(16000)、`high`(32000)          |
+| `tools`            | array   | ❌    | 工具列表（Function Calling）                                                            |
 
 ## 响应格式
 
@@ -206,13 +208,13 @@ data: [DONE]
 
 API 返回标准的 HTTP 状态码：
 
-| 状态码 | 说明 |
-|--------|------|
-| 200 | 请求成功 |
-| 400 | 请求参数错误 |
-| 401 | API Key 无效 |
-| 429 | 请求过于频繁 |
-| 500 | 服务器内部错误 |
+| 状态码 | 说明           |
+| ------ | -------------- |
+| 200    | 请求成功       |
+| 400    | 请求参数错误   |
+| 401    | API Key 无效   |
+| 429    | 请求过于频繁   |
+| 500    | 服务器内部错误 |
 
 错误响应格式：
 
@@ -244,11 +246,11 @@ curl http://localhost:8045/v1/chat/completions \
   }'
 ```
 
-| reasoning_effort | thinking_budget | 说明 |
-|-----------------|-----------------|------|
-| `low` | 1024 | 快速响应，适合简单问题（默认） |
-| `medium` | 16000 | 平衡模式 |
-| `high` | 32000 | 深度思考，适合复杂推理 |
+| reasoning_effort | thinking_budget | 说明                           |
+| ---------------- | --------------- | ------------------------------ |
+| `low`            | 1024            | 快速响应，适合简单问题（默认） |
+| `medium`         | 16000           | 平衡模式                       |
+| `high`           | 32000           | 深度思考，适合复杂推理         |
 
 ### 使用 thinking_budget（直接数值）
 
@@ -271,6 +273,7 @@ curl http://localhost:8045/v1/chat/completions \
 - 全局默认重试次数（服务端配置）：
   - 文件：`config.json` 中的 `other.retryTimes`
   - 示例：
+
     ```json
     "other": {
       "timeout": 300000,
@@ -279,6 +282,7 @@ curl http://localhost:8045/v1/chat/completions \
       "useNativeAxios": false
     }
     ```
+
   - 服务器始终使用这里配置的值作为 429/503 时的重试次数（默认 3 次）。
 
 ### 思维链响应格式
@@ -286,6 +290,7 @@ curl http://localhost:8045/v1/chat/completions \
 思维链内容通过 `reasoning_content` 字段输出（兼容 DeepSeek 格式）：
 
 **非流式响应**：
+
 ```json
 {
   "choices": [{
@@ -299,6 +304,7 @@ curl http://localhost:8045/v1/chat/completions \
 ```
 
 **流式响应**：
+
 ```
 data: {"choices":[{"delta":{"reasoning_content":"让我"}}]}
 data: {"choices":[{"delta":{"reasoning_content":"思考..."}}]}
@@ -349,13 +355,13 @@ curl http://localhost:8045/sdapi/v1/img2img \
 
 ### 其他 SD API 端点
 
-| 端点 | 说明 |
-|------|------|
+| 端点                      | 说明                   |
+| ------------------------- | ---------------------- |
 | `GET /sdapi/v1/sd-models` | 获取可用的图片生成模型 |
-| `GET /sdapi/v1/options` | 获取当前选项 |
-| `GET /sdapi/v1/samplers` | 获取可用的采样器 |
-| `GET /sdapi/v1/upscalers` | 获取可用的放大器 |
-| `GET /sdapi/v1/progress` | 获取生成进度 |
+| `GET /sdapi/v1/options`   | 获取当前选项           |
+| `GET /sdapi/v1/samplers`  | 获取可用的采样器       |
+| `GET /sdapi/v1/upscalers` | 获取可用的放大器       |
+| `GET /sdapi/v1/progress`  | 获取生成进度           |
 
 ## 管理 API
 
@@ -407,6 +413,7 @@ curl "http://localhost:8045/admin/tokens/REFRESH_TOKEN/quotas?refresh=true" \
 ```
 
 **响应示例**：
+
 ```json
 {
   "success": true,
@@ -441,6 +448,7 @@ curl -X PUT http://localhost:8045/admin/rotation \
 ```
 
 **可用策略**：
+
 - `round_robin`：每次请求切换 Token
 - `quota_exhausted`：额度耗尽才切换
 - `request_count`：自定义请求次数后切换

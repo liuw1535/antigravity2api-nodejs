@@ -606,6 +606,49 @@ router.post("/oauth/exchange", cookieAuthMiddleware, async (req, res) => {
   }
 });
 
+router.get("/oauth/url", cookieAuthMiddleware, async (req, res) => {
+  const mode = req.query.mode === "geminicli" ? "geminicli" : "antigravity";
+  const rawCount = Number.parseInt(String(req.query.count || "1"), 10);
+  const count = Math.max(
+    1,
+    Math.min(100, Number.isInteger(rawCount) ? rawCount : 1),
+  );
+
+  try {
+    const ports = new Set();
+    while (ports.size < count) {
+      ports.add(Math.floor(Math.random() * 10000) + 50000);
+    }
+
+    const urls = Array.from(ports).map((port) => ({
+      port,
+      url: oauthManager.generateAuthUrl(port, mode),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        mode,
+        count,
+        urls,
+        submit: {
+          method: "POST",
+          url: "/admin/oauth/exchange",
+          contentType: "application/json",
+          body: {
+            code: "从回调URL中提取的code",
+            port: "回调URL中的本地端口",
+            mode,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`[${mode}] 获取OAuth URL失败:`, error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // 获取配置
 router.get("/config", cookieAuthMiddleware, (req, res) => {
   try {
