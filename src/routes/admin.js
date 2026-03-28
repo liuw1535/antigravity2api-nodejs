@@ -68,6 +68,42 @@ const cookieAuthMiddleware = (req, res, next) => {
   }
 };
 
+const cookieOrPasswordAuthMiddleware = (req, res, next) => {
+  let token = req.cookies?.authToken;
+
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  }
+
+  if (token) {
+    try {
+      const decoded = verifyToken(token);
+      req.user = decoded;
+      return next();
+    } catch (error) {
+      res.clearCookie("authToken", {
+        ...COOKIE_OPTIONS,
+        secure: req.secure || process.env.NODE_ENV === "production",
+      });
+    }
+  }
+
+  const password =
+    typeof req.body?.password === "string"
+      ? req.body.password
+      : typeof req.query?.password === "string"
+        ? req.query.password
+        : null;
+
+  if (password && verifyPassword(password)) {
+    req.user = { username: config.admin.username, role: "admin_password" };
+    return next();
+  }
+
+  return res.status(401).json({ error: "Token required or password invalid" });
+};
+
 // 获取客户端 IP
 function getClientIP(req) {
   return (
@@ -572,41 +608,47 @@ router.post("/tokens/import", cookieAuthMiddleware, async (req, res) => {
   }
 });
 
-router.post("/oauth/exchange", cookieAuthMiddleware, async (req, res) => {
-  const { code, port, mode = "antigravity" } = req.body;
-  if (!code || !port) {
-    return res.status(400).json({ success: false, message: "code和port必填" });
-  }
-
-  try {
-    const account = await oauthManager.authenticate(code, port, mode);
-
-    if (mode === "geminicli") {
-      // Gemini CLI 模式
-      res.json({
-        success: true,
-        data: account,
-        message: "Gemini CLI Token添加成功",
-      });
-    } else {
-      // Antigravity 模式
-      const message = account.hasQuota
-        ? "Token添加成功"
-        : "Token添加成功（该账号无资格，已自动使用随机ProjectId）";
-      res.json({
-        success: true,
-        data: account,
-        message,
-        fallbackMode: !account.hasQuota,
-      });
+router.post(
+  "/oauth/exchange",
+  cookieOrPasswordAuthMiddleware,
+  async (req, res) => {
+    const { code, port, mode = "antigravity" } = req.body;
+    if (!code || !port) {
+      return res
+        .status(400)
+        .json({ success: false, message: "code和port必填" });
     }
-  } catch (error) {
-    logger.error(`[${mode}] 认证失败:`, error.message);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
-router.get("/oauth/url", cookieAuthMiddleware, async (req, res) => {
+    try {
+      const account = await oauthManager.authenticate(code, port, mode);
+
+      if (mode === "geminicli") {
+        // Gemini CLI 模式
+        res.json({
+          success: true,
+          data: account,
+          message: "Gemini CLI Token添加成功",
+        });
+      } else {
+        // Antigravity 模式
+        const message = account.hasQuota
+          ? "Token添加成功"
+          : "Token添加成功（该账号无资格，已自动使用随机ProjectId）";
+        res.json({
+          success: true,
+          data: account,
+          message,
+          fallbackMode: !account.hasQuota,
+        });
+      }
+    } catch (error) {
+      logger.error(`[${mode}] 认证失败:`, error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+);
+
+router.get("/oauth/url", cookieOrPasswordAuthMiddleware, async (req, res) => {
   const mode = req.query.mode === "geminicli" ? "geminicli" : "antigravity";
   const rawCount = Number.parseInt(String(req.query.count || "1"), 10);
   const count = Math.max(
@@ -639,6 +681,7 @@ router.get("/oauth/url", cookieAuthMiddleware, async (req, res) => {
             code: "从回调URL中提取的code",
             port: "回调URL中的本地端口",
             mode,
+            password: "可选，未携带Cookie时可直接传管理员密码",
           },
         },
       },

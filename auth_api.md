@@ -9,7 +9,10 @@
 - `antigravity`
 - `geminicli`
 
-所有接口均位于管理后台路由下，默认需要先完成后台登录。
+所有接口均位于管理后台路由下，支持以下两种鉴权方式之一：
+
+- 已登录后台，自动携带 Cookie
+- 直接传管理员密码 `password`
 
 ---
 
@@ -21,15 +24,16 @@
 
 ### Query 参数
 
-| 参数    | 类型   | 必填 | 说明                                             |
-| ------- | ------ | ---: | ------------------------------------------------ |
-| `mode`  | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
-| `count` | number |   否 | 返回授权链接数量，范围 `1~100`，默认 `1`         |
+| 参数       | 类型   | 必填 | 说明                                             |
+| ---------- | ------ | ---: | ------------------------------------------------ |
+| `mode`     | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
+| `count`    | number |   否 | 返回授权链接数量，范围 `1~100`，默认 `1`         |
+| `password` | string |   否 | 未携带后台 Cookie 时，可直接传管理员密码进行调用 |
 
 ### 示例
 
 ```http
-GET /admin/oauth/url?mode=geminicli&count=2
+GET /admin/oauth/url?mode=geminicli&count=2&password=your-admin-password
 ```
 
 ### 返回示例
@@ -57,7 +61,8 @@ GET /admin/oauth/url?mode=geminicli&count=2
       "body": {
         "code": "从回调URL中提取的code",
         "port": "回调URL中的本地端口",
-        "mode": "geminicli"
+        "mode": "geminicli",
+        "password": "可选，未携带Cookie时可直接传管理员密码"
       }
     }
   }
@@ -86,11 +91,12 @@ Content-Type: application/json
 
 ### 请求体
 
-| 字段   | 类型   | 必填 | 说明                                             |
-| ------ | ------ | ---: | ------------------------------------------------ |
-| `code` | string |   是 | Google OAuth 回调地址中的授权码                  |
-| `port` | number |   是 | 回调地址中的本地端口                             |
-| `mode` | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
+| 字段       | 类型   | 必填 | 说明                                             |
+| ---------- | ------ | ---: | ------------------------------------------------ |
+| `code`     | string |   是 | Google OAuth 回调地址中的授权码                  |
+| `port`     | number |   是 | 回调地址中的本地端口                             |
+| `mode`     | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
+| `password` | string |   否 | 未携带后台 Cookie 时，可直接传管理员密码进行调用 |
 
 ### 示例
 
@@ -98,7 +104,8 @@ Content-Type: application/json
 {
   "code": "4/0AQSTgQ...",
   "port": 53120,
-  "mode": "antigravity"
+  "mode": "antigravity",
+  "password": "your-admin-password"
 }
 ```
 
@@ -184,7 +191,7 @@ Content-Type: application/json
 
 #### 未登录后台
 
-接口会因未通过后台认证而返回 `401`。
+接口会因未通过后台认证，且 `password` 未提供或错误，而返回 `401`。
 
 ---
 
