@@ -91,12 +91,13 @@ Content-Type: application/json
 
 ### 请求体
 
-| 字段       | 类型   | 必填 | 说明                                             |
-| ---------- | ------ | ---: | ------------------------------------------------ |
-| `code`     | string |   是 | Google OAuth 回调地址中的授权码                  |
-| `port`     | number |   是 | 回调地址中的本地端口                             |
-| `mode`     | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
-| `password` | string |   否 | 未携带后台 Cookie 时，可直接传管理员密码进行调用 |
+| 字段          | 类型   | 必填 | 说明                                             |
+| ------------- | ------ | ---: | ------------------------------------------------ |
+| `code`        | string |   是 | Google OAuth 回调地址中的授权码                  |
+| `port`        | number |   是 | 回调地址中的本地端口                             |
+| `mode`        | string |   否 | `antigravity` 或 `geminicli`，默认 `antigravity` |
+| `password`    | string |   否 | 未携带后台 Cookie 时，可直接传管理员密码进行调用 |
+| `callbackUrl` | string |   否 | 完整回调 URL；提供后可自动解析 `code` 与 `port`  |
 
 ### 示例
 
@@ -108,6 +109,21 @@ Content-Type: application/json
   "password": "your-admin-password"
 }
 ```
+
+### 使用完整回调 URL 的示例
+
+```json
+{
+  "callbackUrl": "http://localhost:53120/oauth-callback?code=4/0AQSTgQ...&scope=...",
+  "mode": "antigravity",
+  "password": "your-admin-password"
+}
+```
+
+说明：
+
+- 当提供 [`callbackUrl`](auth_api.md) 时，服务端会自动解析出 `code` 与 `port`
+- 如果同时传了 `code` / `port`，则优先使用显式传入值
 
 ### Antigravity 返回示例
 

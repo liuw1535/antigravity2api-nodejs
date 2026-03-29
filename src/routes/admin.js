@@ -612,11 +612,36 @@ router.post(
   "/oauth/exchange",
   cookieOrPasswordAuthMiddleware,
   async (req, res) => {
-    const { code, port, mode = "antigravity" } = req.body;
+    const {
+      callbackUrl,
+      code: rawCode,
+      port: rawPort,
+      mode = "antigravity",
+    } = req.body;
+
+    let code = rawCode;
+    let port = rawPort;
+
+    if (callbackUrl && (!code || !port)) {
+      try {
+        const parsedUrl = new URL(String(callbackUrl));
+        code = code || parsedUrl.searchParams.get("code");
+        port =
+          port ||
+          new URL(parsedUrl.origin).port ||
+          (parsedUrl.protocol === "https:" ? 443 : 80);
+      } catch (error) {
+        return res
+          .status(400)
+          .json({ success: false, message: "callbackUrl格式无效" });
+      }
+    }
+
     if (!code || !port) {
-      return res
-        .status(400)
-        .json({ success: false, message: "code和port必填" });
+      return res.status(400).json({
+        success: false,
+        message: "code和port必填，或提供完整callbackUrl",
+      });
     }
 
     try {
