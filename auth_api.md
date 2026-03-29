@@ -77,6 +77,59 @@ GET /admin/oauth/url?mode=geminicli&count=2&password=your-admin-password
 
 ---
 
+## 2.5 获取凭证统计
+
+### 接口
+
+`GET /admin/token-summary`
+
+### 鉴权方式
+
+支持以下任一方式：
+
+- 已登录后台，自动携带 Cookie
+- 通过 query 传管理员密码 `password`
+
+### Query 参数
+
+| 参数       | 类型   | 必填 | 说明                                             |
+| ---------- | ------ | ---: | ------------------------------------------------ |
+| `password` | string |   否 | 未携带后台 Cookie 时，可直接传管理员密码进行调用 |
+
+### 示例
+
+```http
+GET /admin/token-summary?password=your-admin-password
+```
+
+### 返回示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "antigravity": {
+      "total": 12,
+      "enabled": 9,
+      "disabled": 3
+    },
+    "geminicli": {
+      "total": 5,
+      "enabled": 4,
+      "disabled": 1
+    }
+  }
+}
+```
+
+### 说明
+
+- `enabled` 表示当前可用数量
+- `disabled` 表示当前不可用数量
+- 适合外部程序快速轮询可用凭证数
+
+---
+
 ## 3. 提交授权码并交换 Token
 
 ### 接口

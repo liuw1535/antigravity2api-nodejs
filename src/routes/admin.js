@@ -205,6 +205,36 @@ router.get("/tokens", cookieAuthMiddleware, async (req, res) => {
   }
 });
 
+router.get(
+  "/token-summary",
+  cookieOrPasswordAuthMiddleware,
+  async (req, res) => {
+    try {
+      const [antigravityTokens, geminicliTokens] = await Promise.all([
+        tokenManager.getTokenList(),
+        geminicliTokenManager.getTokenList(),
+      ]);
+
+      const buildSummary = (tokens) => ({
+        total: tokens.length,
+        enabled: tokens.filter((token) => token.enable).length,
+        disabled: tokens.filter((token) => !token.enable).length,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          antigravity: buildSummary(antigravityTokens),
+          geminicli: buildSummary(geminicliTokens),
+        },
+      });
+    } catch (error) {
+      logger.error("获取Token统计失败:", error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+);
+
 router.post("/tokens", cookieAuthMiddleware, async (req, res) => {
   const {
     access_token,
