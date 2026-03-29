@@ -240,21 +240,6 @@ async function processGeminiCliOAuthCallback() {
           throw new Error("交换失败: " + result.message);
         }
 
-        const account = result.data;
-        // 添加到 Gemini CLI token 列表
-        const addResponse = await authFetch("/admin/geminicli/tokens", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(account),
-        });
-
-        const addResult = await addResponse.json();
-        if (!addResult.success) {
-          throw new Error("添加失败: " + addResult.message);
-        }
-
         successCount += 1;
       } catch (error) {
         errors.push(`第${index + 1}行: ${error.message}`);

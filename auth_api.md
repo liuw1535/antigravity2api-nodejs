@@ -1,6 +1,6 @@
 # Auth API 文档
 
-本文档说明管理后台中与 OAuth 授权相关的 API 接口，用于获取授权链接以及提交授权码完成登录 / Token 交换。
+本文档说明管理后台中与 OAuth 授权相关的 API 接口，用于获取授权链接以及提交授权码完成 Token 交换与自动保存。
 
 ## 1. 适用范围
 
@@ -83,6 +83,17 @@ GET /admin/oauth/url?mode=geminicli&count=2&password=your-admin-password
 
 `POST /admin/oauth/exchange`
 
+### 行为说明
+
+该接口会一步完成以下操作：
+
+1. 使用授权码交换 access token / refresh token
+2. 获取邮箱
+3. Antigravity 模式下尝试获取 `projectId`
+4. 自动保存到系统 Token 列表
+
+因此外部程序调用 [`POST /admin/oauth/exchange`](src/routes/admin.js:611) 后，通常**不需要再额外调用** [`POST /admin/tokens`](src/routes/admin.js:208) 或 [`POST /admin/geminicli/tokens`](src/routes/admin.js:913)。
+
 ### 请求头
 
 ```http
@@ -140,7 +151,8 @@ Content-Type: application/json
     "enable": true
   },
   "message": "Token添加成功",
-  "fallbackMode": false
+  "fallbackMode": false,
+  "saved": true
 }
 ```
 
@@ -156,7 +168,8 @@ Content-Type: application/json
     "email": "user@example.com",
     "enable": true
   },
-  "message": "Gemini CLI Token添加成功"
+  "message": "Gemini CLI Token添加成功",
+  "saved": true
 }
 ```
 
@@ -171,7 +184,7 @@ Content-Type: application/json
 3. 完成 Google 登录与授权
 4. 从回调 URL 中提取 `code` 和 `port`
 5. 调用 `POST /admin/oauth/exchange`
-6. 将返回的账号信息保存到对应 Token 列表
+6. 接口自动保存 Token，无需再额外调用保存接口
 
 ### 批量流程
 
@@ -180,6 +193,7 @@ Content-Type: application/json
 3. 收集多条回调 URL
 4. 逐条提取 `code` 与 `port`
 5. 多次调用 `POST /admin/oauth/exchange`
+6. 每次交换成功后接口会自动保存
 
 ---
 

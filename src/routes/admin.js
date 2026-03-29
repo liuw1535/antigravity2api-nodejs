@@ -648,22 +648,32 @@ router.post(
       const account = await oauthManager.authenticate(code, port, mode);
 
       if (mode === "geminicli") {
-        // Gemini CLI 模式
+        const saveResult = await geminicliTokenManager.addToken(account);
+        if (!saveResult.success) {
+          throw new Error(saveResult.message || "Gemini CLI Token保存失败");
+        }
+
         res.json({
           success: true,
           data: account,
-          message: "Gemini CLI Token添加成功",
+          message: saveResult.message || "Gemini CLI Token添加成功",
+          saved: true,
         });
       } else {
-        // Antigravity 模式
+        const saveResult = await tokenManager.addToken(account);
+        if (!saveResult.success) {
+          throw new Error(saveResult.message || "Token保存失败");
+        }
+
         const message = account.hasQuota
-          ? "Token添加成功"
+          ? saveResult.message || "Token添加成功"
           : "Token添加成功（该账号无资格，已自动使用随机ProjectId）";
         res.json({
           success: true,
           data: account,
           message,
           fallbackMode: !account.hasQuota,
+          saved: true,
         });
       }
     } catch (error) {

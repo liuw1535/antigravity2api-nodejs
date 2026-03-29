@@ -277,20 +277,6 @@ async function processOAuthCallbackModal() {
           throw new Error("交换失败: " + result.message);
         }
 
-        const account = result.data;
-        const addResponse = await authFetch("/admin/tokens", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(account),
-        });
-
-        const addResult = await addResponse.json();
-        if (!addResult.success) {
-          throw new Error("添加失败: " + addResult.message);
-        }
-
         successCount += 1;
         if (result.fallbackMode) {
           fallbackCount += 1;
