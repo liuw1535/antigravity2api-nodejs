@@ -553,13 +553,13 @@ function editGeminiCliField(event, tokenId, field, currentValue) {
 // 切换 Gemini CLI Token 状态
 async function toggleGeminiCliToken(tokenId, enable) {
   const action = enable ? "启用" : "禁用";
-  const confirmed = await showConfirm(
-    `确定要${action}这个Token吗？`,
-    `${action}确认`,
-  );
+  const confirmMsg = enable
+    ? "确定要启用这个Token吗？\n系统将先验证凭证可用性，验证通过后才会启用。"
+    : `确定要${action}这个Token吗？`;
+  const confirmed = await showConfirm(confirmMsg, `${action}确认`);
   if (!confirmed) return;
 
-  showLoading(`正在${action}...`);
+  showLoading(enable ? "正在验证凭证可用性..." : `正在${action}...`);
   try {
     const response = await authFetch(
       `/admin/geminicli/tokens/${encodeURIComponent(tokenId)}`,
@@ -568,7 +568,9 @@ async function toggleGeminiCliToken(tokenId, enable) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ enable }),
+        body: JSON.stringify(
+          enable ? { enable, enableWithTest: true } : { enable },
+        ),
       },
     );
 
@@ -578,7 +580,7 @@ async function toggleGeminiCliToken(tokenId, enable) {
       showToast(`已${action}`, "success");
       loadGeminiCliTokens();
     } else {
-      showToast(data.message || "操作失败", "error");
+      showToast(data.message || "操作失败", enable ? "warning" : "error");
     }
   } catch (error) {
     hideLoading();

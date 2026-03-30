@@ -1079,6 +1079,89 @@ class TokenManager {
   }
 
   /**
+   * 从禁用池启用 token（先测试可用性）
+   * @param {string} tokenId - 安全的 token ID
+   * @returns {Promise<Object>} 操作结果
+   */
+  async enableTokenById(tokenId) {
+    try {
+      const tokenData = await this.findTokenById(tokenId);
+      if (!tokenData) {
+        return { success: false, message: 'Token不存在' };
+      }
+
+      // 如果 token 已经启用，直接返回
+      if (tokenData.enable !== false) {
+        return { success: true, message: 'Token已处于启用状态' };
+      }
+
+      log.info(`[启用检测] 正在测试 token ${tokenId} 的可用性...`);
+
+      // 步骤1: 尝试刷新 token
+      try {
+        await this.refreshToken(tokenData);
+      } catch (error) {
+        const statusCode = error.statusCode || 500;
+        if (statusCode === 403 || statusCode === 400) {
+          log.warn(`[启用检测] token ${tokenId} 刷新失败(${statusCode}): ${error.message}`);
+          return { success: false, message: `凭证不可用，刷新失败(${statusCode}): ${error.message}` };
+        }
+        // 其他错误（如网络问题），也返回失败但提示不同
+        log.warn(`[启用检测] token ${tokenId} 刷新失败: ${error.message}`);
+        return { success: false, message: `凭证刷新失败: ${error.message}` };
+      }
+
+      // 步骤2: 尝试获取 projectId（验证账号权限）
+      try {
+        const {projectId, sub} = await this.fetchProjectId(tokenData) || {};
+        if (projectId) {
+          tokenData.projectId = projectId;
+          tokenData.sub = sub;
+        } else if (!tokenData.projectId && !config.skipProjectIdFetch) {
+          log.warn(`[启用检测] token ${tokenId} 无法获取 projectId`);
+          return { success: false, message: '凭证不可用: 无法获取 projectId，该账号可能不支持 Code Assist' };
+        }
+      } catch (error) {
+        const statusCode = error.statusCode || 500;
+        if (statusCode === 403 || statusCode === 401) {
+          log.warn(`[启用检测] token ${tokenId} 权限验证失败(${statusCode}): ${error.message}`);
+          return { success: false, message: `凭证不可用，权限验证失败(${statusCode}): ${error.message}` };
+        }
+        // 非致命错误，继续启用（可能只是暂时性网络问题）
+        log.warn(`[启用检测] token ${tokenId} 获取 projectId 时出现非致命错误: ${error.message}，继续启用`);
+      }
+
+      log.info(`[启用检测] token ${tokenId} 测试通过，正在启用...`);
+
+      // 测试通过，执行启用
+      const allTokens = await this.store.readAll();
+      const salt = await this.store.getSalt();
+
+      const index = allTokens.findIndex(token =>
+        generateTokenId(token.refresh_token, salt) === tokenId
+      );
+
+      if (index === -1) {
+        return { success: false, message: 'Token不存在' };
+      }
+
+      const updates = { enable: true, disableReason: null, disableTime: null };
+      if (tokenData.projectId) updates.projectId = tokenData.projectId;
+      if (tokenData.sub) updates.sub = tokenData.sub;
+
+      allTokens[index] = { ...allTokens[index], ...updates };
+      await this.store.writeAll(allTokens);
+
+      await this.reload();
+      return { success: true, message: 'Token启用成功' };
+    } catch (error) {
+      log.error('启用Token失败:', error.message);
+      return { success: false, message: `启用失败: ${error.message}` };
+    }
+  }
+
+
+  /**
    * 根据 tokenId 删除 token
    * @param {string} tokenId - 安全的 token ID
    * @returns {Promise<Object>} 操作结果

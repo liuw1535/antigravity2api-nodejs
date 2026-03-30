@@ -278,9 +278,21 @@ router.put("/tokens/:tokenId", cookieAuthMiddleware, async (req, res) => {
   delete updates.refresh_token;
 
   try {
-    const result = await tokenManager.updateTokenById(tokenId, updates);
-    logger.info(`更新Token: ${tokenId}`);
-    res.json(result);
+    // 如果是从禁用状态启用，且请求中包含 enableWithTest 标志，则先测试可用性
+    if (updates.enable === true && updates.enableWithTest) {
+      delete updates.enableWithTest; // 不传递给底层
+      const result = await tokenManager.enableTokenById(tokenId);
+      if (result.success) {
+        logger.info(`启用Token(已验证): ${tokenId}`);
+      } else {
+        logger.warn(`启用Token验证失败: ${tokenId} - ${result.message}`);
+      }
+      res.json(result);
+    } else {
+      const result = await tokenManager.updateTokenById(tokenId, updates);
+      logger.info(`更新Token: ${tokenId}`);
+      res.json(result);
+    }
   } catch (error) {
     logger.error("更新Token失败:", error.message);
     res.status(500).json({ success: false, message: error.message });
@@ -987,12 +999,24 @@ router.put(
     delete updates.refresh_token;
 
     try {
-      const result = await geminicliTokenManager.updateTokenById(
-        tokenId,
-        updates,
-      );
-      logger.info(`[GeminiCLI] 更新Token: ${tokenId}`);
-      res.json(result);
+      // 如果是从禁用状态启用，且请求中包含 enableWithTest 标志，则先测试可用性
+      if (updates.enable === true && updates.enableWithTest) {
+        delete updates.enableWithTest;
+        const result = await geminicliTokenManager.enableTokenById(tokenId);
+        if (result.success) {
+          logger.info(`[GeminiCLI] 启用Token(已验证): ${tokenId}`);
+        } else {
+          logger.warn(`[GeminiCLI] 启用Token验证失败: ${tokenId} - ${result.message}`);
+        }
+        res.json(result);
+      } else {
+        const result = await geminicliTokenManager.updateTokenById(
+          tokenId,
+          updates,
+        );
+        logger.info(`[GeminiCLI] 更新Token: ${tokenId}`);
+        res.json(result);
+      }
     } catch (error) {
       logger.error("[GeminiCLI] 更新Token失败:", error.message);
       res.status(500).json({ success: false, message: error.message });
