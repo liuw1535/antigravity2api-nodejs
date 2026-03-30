@@ -751,6 +751,69 @@ class GeminiCliTokenManager {
   }
 
   /**
+   * 发送测试消息验证凭证在 API 层面的可用性
+   * 通过非流式 generateContent 发送一个极简请求，检查是否会返回 403 等致命错误
+   * @param {Object} token - Token 对象（必须已刷新且包含 projectId）
+   * @returns {Promise<{ok: boolean, status?: number, message?: string}>}
+   * @private
+   */
+  async _sendTestMessage(token) {
+    const geminicliConfig = config.geminicli?.api || {};
+    const noStreamUrl = geminicliConfig.noStreamUrl
+      || 'https://cloudcode-pa.googleapis.com/v1internal:generateContent';
+
+    const testRequestBody = {
+      model: 'gemini-2.5-flash',
+      project: token.projectId,
+      request: {
+        contents: [
+          { role: 'user', parts: [{ text: 'hi' }] }
+        ],
+        generationConfig: {
+          maxOutputTokens: 1,
+          candidateCount: 1
+        }
+      }
+    };
+
+    try {
+      await httpRequest({
+        method: 'POST',
+        url: noStreamUrl,
+        headers: {
+          'Host': geminicliConfig.host || GEMINICLI_API_CONFIG.HOST,
+          'User-Agent': geminicliConfig.userAgent || GEMINICLI_API_CONFIG.USER_AGENT,
+          'Authorization': `Bearer ${token.access_token}`,
+          'Content-Type': 'application/json',
+          'Accept-Encoding': 'gzip'
+        },
+        data: testRequestBody,
+        timeout: 30000
+      });
+      return { ok: true };
+    } catch (error) {
+      const status = error.response?.status || error.status || error.statusCode || 500;
+      let errorBody = '';
+      try {
+        const data = error.response?.data;
+        errorBody = typeof data === 'string' ? data : (data ? JSON.stringify(data) : error.message);
+      } catch {
+        errorBody = error.message || '未知错误';
+      }
+
+      if (status === 403) {
+        const isContextLimit = String(errorBody).includes('The caller does not');
+        if (!isContextLimit) {
+          return { ok: false, status, message: errorBody };
+        }
+      }
+
+      // 其他非致命状态码不阻止启用
+      return { ok: true };
+    }
+  }
+
+  /**
    * 从禁用池启用 token（先测试可用性）
    * @param {string} tokenId - 安全的 token ID
    * @returns {Promise<Object>} 操作结果
@@ -801,7 +864,21 @@ class GeminiCliTokenManager {
         log.warn(`[GeminiCLI][启用检测] token ${tokenId} 获取 projectId 时出现非致命错误: ${error.message}，继续启用`);
       }
 
-      log.info(`[GeminiCLI][启用检测] token ${tokenId} 测试通过，正在启用...`);
+      // 步骤3: 发送测试消息，验证 API 调用是否会触发 403
+      if (tokenData.projectId) {
+        log.info(`[GeminiCLI][启用检测] 正在发送测试消息验证 API 可用性...`);
+        const testResult = await this._sendTestMessage(tokenData);
+        if (!testResult.ok) {
+          log.warn(`[GeminiCLI][启用检测] token ${tokenId} 测试消息失败(${testResult.status}): ${testResult.message}`);
+          return {
+            success: false,
+            message: `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`
+          };
+        }
+        log.info(`[GeminiCLI][启用检测] token ${tokenId} 测试消息通过`);
+      }
+
+      log.info(`[GeminiCLI][启用检测] token ${tokenId} 全部检测通过，正在启用...`);
 
       // 测试通过，执行启用
       const allTokens = await this.store.readAll();
