@@ -20,6 +20,36 @@ const GEMINICLI_API_CONFIG = {
   BASE_URL: "https://cloudcode-pa.googleapis.com",
 };
 
+// Tier 映射表：将原始 tier ID 映射为统一 tier 名称
+const TIER_MAP = {
+  "g1-ultra-tier": "ultra",
+  "ws-ai-ultra-business-tier": "ultra",
+  "g1-pro-tier": "pro",
+  "helium-tier": "pro",
+  "standard-tier": "pro",
+  "free-tier": "free",
+};
+
+/**
+ * 将原始 tier ID 映射为统一的 tier 名称
+ * @param {string|null} rawTier - 原始 tier ID
+ * @returns {string} 统一的 tier 名称
+ */
+function mapTier(rawTier) {
+  if (!rawTier) return "pro";
+  const lower = rawTier.toLowerCase();
+  return TIER_MAP[lower] || "pro";
+}
+
+// 永久性刷新失败的错误文本特征（匹配到任一即视为永久失效）
+const PERMANENT_REFRESH_ERROR_TEXTS = [
+  "invalid_grant",
+  "refresh_token_expired",
+  "invalid_refresh_token",
+  "unauthorized_client",
+  "access_denied",
+];
+
 // 轮询策略枚举（复用 token_manager.js 的定义）
 const RotationStrategy = {
   ROUND_ROBIN: "round_robin", // 均衡负载：每次请求切换
@@ -167,6 +197,10 @@ class GeminiCliTokenManager {
 
   /**
    * 安全刷新单个 token（不抛出异常）
+   * 
+   * 错误分类策略（参考 MD 文档第 8.3 节）：
+   * - 永久失效：400/401/403 或错误文本含 invalid_grant 等
+   * - 临时失败：429/500/502/503/504/网络异常
    * @param {Object} token - Token 对象
    * @returns {Promise<{action: 'success'|'disable'|'skip', reason?: string}>} 刷新结果
    * @private
@@ -182,7 +216,14 @@ class GeminiCliTokenManager {
       const rawMessage = error.message || "未知错误";
       const reason = `启动检测刷新失败(${statusCode}): ${rawMessage}`;
       this._recordTokenError(token, reason, "startup_refresh");
-      if (statusCode === 403 || statusCode === 400) {
+
+      // 永久失效判断：HTTP 400/401/403 或错误文本包含特定关键词
+      const isPermanent =
+        statusCode === 400 ||
+        statusCode === 401 ||
+        statusCode === 403 ||
+        PERMANENT_REFRESH_ERROR_TEXTS.some((t) => rawMessage.toLowerCase().includes(t));
+      if (isPermanent) {
         return { action: "disable", reason };
       }
       return { action: "skip", reason };
@@ -351,18 +392,22 @@ class GeminiCliTokenManager {
   }
 
   /**
-   * 通过 loadCodeAssist API 获取 projectId
+   * 通过 loadCodeAssist API 获取 projectId 和 tier 信息
+   * 
+   * 优先级链（参考 MD 文档第 6 节）：
+   * 1. loadCodeAssist → 提取 cloudaicompanionProject + tier
+   * 2. onboardUser → 创建项目并获取 projectId
+   * 3. Google Cloud 项目列表 → 回退方案
    * @param {Object} token - Token 对象
-   * @returns {Promise<string|null>} projectId 或 null
+   * @returns {Promise<{projectId: string|null, tier: string|null}>} projectId 和 tier
    */
   async fetchProjectId(token) {
     const salt = await this.store.getSalt();
     const tokenId = generateTokenId(token.refresh_token, salt);
-    log.info(`[GeminiCLI] 正在获取 projectId: ${tokenId}`);
+    log.info(`[GeminiCLI] 正在获取 projectId 和 tier: ${tokenId}`);
 
     const geminicliConfig = config.geminicli?.api || {};
     const baseUrl = geminicliConfig.baseUrl || GEMINICLI_API_CONFIG.BASE_URL;
-    const url = `${baseUrl}/v1internal:loadCodeAssist`;
 
     const headers = {
       Host: geminicliConfig.host || GEMINICLI_API_CONFIG.HOST,
@@ -373,39 +418,58 @@ class GeminiCliTokenManager {
       "Accept-Encoding": "gzip",
     };
 
-    const requestBody = {
-      metadata: {
-        ideType: "ANTIGRAVITY",
-        platform: "PLATFORM_UNSPECIFIED",
-        pluginType: "GEMINI",
-      },
-    };
-
+    // ===== 第一优先：loadCodeAssist =====
     try {
-      const response = await httpRequest({
+      const loadResponse = await httpRequest({
         method: "POST",
-        url,
+        url: `${baseUrl}/v1internal:loadCodeAssist`,
         headers,
-        data: requestBody,
+        data: {
+          metadata: {
+            ideType: "ANTIGRAVITY",
+            platform: "PLATFORM_UNSPECIFIED",
+            pluginType: "GEMINI",
+          },
+        },
         timeout: 30000,
       });
 
-      const data = response.data;
+      const data = loadResponse.data;
 
-      // 检查是否有 currentTier（表示用户已激活）
-      if (data.currentTier) {
+      // 提取 tier 信息（paidTier 优先，currentTier 其次）
+      const rawTier =
+        data.paidTier?.id || data.currentTier?.id || null;
+      const tier = mapTier(rawTier);
+      if (rawTier) {
+        log.info(`[GeminiCLI] 检测到 tier: ${rawTier} -> ${tier}`);
+      }
+
+      // 情况 A：已经激活，有 currentTier 和 projectId
+      if (data.currentTier || data.cloudaicompanionProject) {
         const projectId = data.cloudaicompanionProject;
         if (projectId) {
           log.info(`[GeminiCLI] 成功获取 projectId: ${projectId}`);
-          return projectId;
+          return { projectId, tier };
         }
         log.warn("[GeminiCLI] loadCodeAssist 响应中无 projectId");
-        return null;
+        // 有 currentTier 但无 projectId，继续尝试 onboardUser
       }
 
-      // 用户未激活，尝试 onboardUser
+      // 情况 B：尚未激活或无 projectId，尝试 onboardUser
       log.info("[GeminiCLI] 用户未激活，尝试 onboardUser...");
-      return await this._tryOnboardUser(token, data);
+      const onboardResult = await this._tryOnboardUser(token, headers, baseUrl, data);
+      if (onboardResult) {
+        return { projectId: onboardResult, tier };
+      }
+
+      // onboardUser 也失败了，尝试 Google Cloud 项目列表
+      log.info("[GeminiCLI] onboardUser 未返回 projectId，尝试 Google Cloud 项目列表...");
+      const gcpProjectId = await this._tryGoogleCloudProjectList(token);
+      if (gcpProjectId) {
+        return { projectId: gcpProjectId, tier };
+      }
+
+      return { projectId: null, tier };
     } catch (error) {
       const status = error.response?.status || error.status || 500;
       log.error(`[GeminiCLI] 获取 projectId 失败 (${status}):`, error.message);
@@ -413,34 +477,33 @@ class GeminiCliTokenManager {
       if (status === 403 || status === 401) {
         throw new TokenError("Token 无权限获取 projectId", tokenId, status);
       }
-      throw new TokenError(
-        `获取 projectId 失败: ${error.message}`,
-        tokenId,
-        status,
-      );
+
+      // 非致命错误时仍尝试 Google Cloud 项目列表回退
+      log.info("[GeminiCLI] loadCodeAssist 失败，尝试 Google Cloud 项目列表回退...");
+      try {
+        const gcpProjectId = await this._tryGoogleCloudProjectList(token);
+        if (gcpProjectId) {
+          return { projectId: gcpProjectId, tier: null };
+        }
+      } catch (fallbackError) {
+        log.error(`[GeminiCLI] Google Cloud 项目列表回退也失败:`, fallbackError.message);
+      }
+
+      throw new TokenError(`获取 projectId 失败: ${error.message}`, tokenId, status);
     }
   }
 
   /**
    * 尝试通过 onboardUser 获取 projectId（长时间运行操作）
    * @param {Object} token - Token 对象
-   * @param {Object} loadCodeAssistData - loadCodeAssist 的响应数据
+   * @param {Object} headers - 请求头
+   * @param {string} baseUrl - API 基础 URL
+   * @param {Object} loadCodeAssistData - loadCodeAssist 的响应数据（用于提取 allowedTiers）
    * @returns {Promise<string|null>} projectId 或 null
    * @private
    */
-  async _tryOnboardUser(token, loadCodeAssistData) {
-    const geminicliConfig = config.geminicli?.api || {};
-    const baseUrl = geminicliConfig.baseUrl || GEMINICLI_API_CONFIG.BASE_URL;
+  async _tryOnboardUser(token, headers, baseUrl, loadCodeAssistData) {
     const url = `${baseUrl}/v1internal:onboardUser`;
-
-    const headers = {
-      Host: geminicliConfig.host || GEMINICLI_API_CONFIG.HOST,
-      "User-Agent":
-        geminicliConfig.userAgent || GEMINICLI_API_CONFIG.USER_AGENT,
-      Authorization: `Bearer ${token.access_token}`,
-      "Content-Type": "application/json",
-      "Accept-Encoding": "gzip",
-    };
 
     // 从 loadCodeAssist 响应中获取默认 tier
     let tierId = "LEGACY";
@@ -511,6 +574,72 @@ class GeminiCliTokenManager {
   }
 
   /**
+   * 第三优先回退：通过 Google Cloud Resource Manager 获取项目列表
+   * 当 loadCodeAssist 和 onboardUser 都失败时使用
+   * @param {Object} token - Token 对象
+   * @returns {Promise<string|null>} projectId 或 null
+   * @private
+   */
+  async _tryGoogleCloudProjectList(token) {
+    try {
+      const response = await httpRequest({
+        method: "GET",
+        url: "https://cloudresourcemanager.googleapis.com/v1/projects",
+        headers: {
+          Authorization: `Bearer ${token.access_token}`,
+          "User-Agent": GEMINICLI_API_CONFIG.USER_AGENT,
+          "Accept-Encoding": "gzip",
+        },
+        timeout: 30000,
+      });
+
+      const projects = (response.data?.projects || []).filter(
+        (p) => p.lifecycleState === "ACTIVE",
+      );
+
+      if (projects.length === 0) {
+        log.warn("[GeminiCLI] Google Cloud 项目列表为空");
+        return null;
+      }
+
+      let selected = null;
+
+      if (projects.length === 1) {
+        // 只有一个项目，直接使用
+        selected = projects[0];
+      } else {
+        // 多个项目，优先选择包含 "default" 的
+        selected = projects.find(
+          (p) =>
+            (p.projectId && p.projectId.toLowerCase().includes("default")) ||
+            (p.name && p.name.toLowerCase().includes("default")),
+        );
+        if (!selected) {
+          // 没有 default 项目，使用第一个
+          selected = projects[0];
+        }
+      }
+
+      const projectId = selected.projectId;
+      if (projectId) {
+        log.info(
+          `[GeminiCLI] 从 Google Cloud 项目列表选择: ${projectId} (共 ${projects.length} 个活跃项目)`,
+        );
+        return projectId;
+      }
+
+      return null;
+    } catch (error) {
+      const status = error.response?.status || error.status || 500;
+      log.error(
+        `[GeminiCLI] Google Cloud 项目列表查询失败 (${status}):`,
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  /**
    * 准备单个 token（刷新 + 获取 projectId）
    * @param {Object} token - Token 对象
    * @returns {Promise<{action: 'ready'|'disable', reason?: string}>} 处理结果
@@ -524,7 +653,9 @@ class GeminiCliTokenManager {
 
     // 获取 projectId（如果没有）
     if (!token.projectId) {
-      const projectId = await this.fetchProjectId(token);
+      const result = await this.fetchProjectId(token);
+      const projectId = result?.projectId;
+      const tier = result?.tier;
       if (!projectId) {
         log.warn(`[GeminiCLI] 无法获取 projectId，禁用账号`);
         return {
@@ -533,6 +664,10 @@ class GeminiCliTokenManager {
         };
       }
       token.projectId = projectId;
+      // 保存 tier 信息（如果获取到了）
+      if (tier) {
+        token.tier = tier;
+      }
       this.saveToFile(token);
     }
 
@@ -548,7 +683,7 @@ class GeminiCliTokenManager {
    */
   _handleTokenError(error, token) {
     const suffix = token.access_token?.slice(-8) || "unknown";
-    if (error.statusCode === 403 || error.statusCode === 400) {
+    if (error.statusCode === 403 || error.statusCode === 401 || error.statusCode === 400) {
       log.warn(
         `[GeminiCLI] ...${suffix}: Token 已失效或错误，已自动禁用该账号`,
       );
@@ -649,6 +784,10 @@ class GeminiCliTokenManager {
         newToken.projectId = tokenData.projectId;
       }
 
+      if (tokenData.tier) {
+        newToken.tier = tokenData.tier;
+      }
+
       allTokens.push(newToken);
       await this.store.writeAll(allTokens);
 
@@ -721,6 +860,7 @@ class GeminiCliTokenManager {
         enable: token.enable !== false,
         email: token.email || null,
         projectId: token.projectId || null,
+        tier: token.tier || null,
         disableReason: token.disableReason || null,
         disableTime: token.disableTime || null,
         lastError: token.lastError || null,
@@ -736,7 +876,7 @@ class GeminiCliTokenManager {
   /**
    * 根据 tokenId 获取并更新 projectId
    * @param {string} tokenId - 安全的 token ID
-   * @returns {Promise<Object>} 包含 projectId 的结果
+   * @returns {Promise<Object>} 包含 projectId 和 tier 的结果
    */
   async fetchProjectIdForToken(tokenId) {
     const tokenData = await this.findTokenById(tokenId);
@@ -749,13 +889,18 @@ class GeminiCliTokenManager {
       await this.refreshToken(tokenData);
     }
 
-    const projectId = await this.fetchProjectId(tokenData);
+    const result = await this.fetchProjectId(tokenData);
+    const projectId = result?.projectId;
+    const tier = result?.tier;
     if (!projectId) {
       throw new TokenError("无法获取 projectId，该账号可能无资格", null, 400);
     }
 
     // 更新并保存
     tokenData.projectId = projectId;
+    if (tier) {
+      tokenData.tier = tier;
+    }
 
     // 更新文件
     const allTokens = await this.store.readAll();
@@ -765,6 +910,9 @@ class GeminiCliTokenManager {
     );
     if (index !== -1) {
       allTokens[index].projectId = projectId;
+      if (tier) {
+        allTokens[index].tier = tier;
+      }
       await this.store.writeAll(allTokens);
     }
 
@@ -774,9 +922,12 @@ class GeminiCliTokenManager {
     );
     if (memoryToken) {
       memoryToken.projectId = projectId;
+      if (tier) {
+        memoryToken.tier = tier;
+      }
     }
 
-    return { projectId };
+    return { projectId, tier };
   }
 
   /**
@@ -918,6 +1069,30 @@ class GeminiCliTokenManager {
   async enableTokenById(tokenId) {
     try {
       const tokenData = await this.findTokenById(tokenId);
+
+      // 辅助函数：将启用验证失败的错误信息写入凭证存储
+      const saveEnableError = async (errorMessage) => {
+        try {
+          const allTokens = await this.store.readAll();
+          const salt = await this.store.getSalt();
+          const index = allTokens.findIndex(
+            (token) => generateTokenId(token.refresh_token, salt) === tokenId,
+          );
+          if (index !== -1) {
+            allTokens[index] = {
+              ...allTokens[index],
+              lastError: errorMessage,
+              lastErrorTime: new Date().toISOString(),
+              lastErrorStage: "enable_test",
+            };
+            await this.store.writeAll(allTokens);
+            await this.reload();
+          }
+        } catch (e) {
+          log.error(`[GeminiCLI][启用检测] 保存错误信息失败: ${e.message}`);
+        }
+      };
+
       if (!tokenData) {
         return { success: false, message: "Token不存在" };
       }
@@ -938,28 +1113,39 @@ class GeminiCliTokenManager {
           log.warn(
             `[GeminiCLI][启用检测] token ${tokenId} 刷新失败(${statusCode}): ${error.message}`,
           );
+          const msg = `凭证不可用，刷新失败(${statusCode}): ${error.message}`;
+          await saveEnableError(msg);
           return {
             success: false,
-            message: `凭证不可用，刷新失败(${statusCode}): ${error.message}`,
+            message: msg,
           };
         }
         log.warn(
           `[GeminiCLI][启用检测] token ${tokenId} 刷新失败: ${error.message}`,
         );
-        return { success: false, message: `凭证刷新失败: ${error.message}` };
+        const refreshMsg = `凭证刷新失败: ${error.message}`;
+        await saveEnableError(refreshMsg);
+        return { success: false, message: refreshMsg };
       }
 
       // 步骤2: 尝试获取 projectId（验证账号权限）
       try {
-        const projectId = await this.fetchProjectId(tokenData);
-        if (projectId) {
-          tokenData.projectId = projectId;
+        const result = await this.fetchProjectId(tokenData);
+        const fetchedProjectId = result?.projectId;
+        const fetchedTier = result?.tier;
+        if (fetchedProjectId) {
+          tokenData.projectId = fetchedProjectId;
+          if (fetchedTier) {
+            tokenData.tier = fetchedTier;
+          }
         } else if (!tokenData.projectId) {
           log.warn(`[GeminiCLI][启用检测] token ${tokenId} 无法获取 projectId`);
+          const noProjectMsg =
+            "凭证不可用: 无法获取 projectId，该账号可能不支持 Gemini CLI";
+          await saveEnableError(noProjectMsg);
           return {
             success: false,
-            message:
-              "凭证不可用: 无法获取 projectId，该账号可能不支持 Gemini CLI",
+            message: noProjectMsg,
           };
         }
       } catch (error) {
@@ -968,9 +1154,11 @@ class GeminiCliTokenManager {
           log.warn(
             `[GeminiCLI][启用检测] token ${tokenId} 权限验证失败(${statusCode}): ${error.message}`,
           );
+          const permMsg = `凭证不可用，权限验证失败(${statusCode}): ${error.message}`;
+          await saveEnableError(permMsg);
           return {
             success: false,
-            message: `凭证不可用，权限验证失败(${statusCode}): ${error.message}`,
+            message: permMsg,
           };
         }
         // 非致命错误，继续启用
@@ -987,9 +1175,11 @@ class GeminiCliTokenManager {
           log.warn(
             `[GeminiCLI][启用检测] token ${tokenId} 测试消息失败(${testResult.status}): ${testResult.message}`,
           );
+          const testMsg = `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`;
+          await saveEnableError(testMsg);
           return {
             success: false,
-            message: `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`,
+            message: testMsg,
           };
         }
         log.info(`[GeminiCLI][启用检测] token ${tokenId} 测试消息通过`);
@@ -1020,6 +1210,7 @@ class GeminiCliTokenManager {
         lastErrorStage: null,
       };
       if (tokenData.projectId) updates.projectId = tokenData.projectId;
+      if (tokenData.tier) updates.tier = tokenData.tier;
 
       allTokens[index] = { ...allTokens[index], ...updates };
       await this.store.writeAll(allTokens);

@@ -1281,7 +1281,9 @@ function showTokenDetail(tokenId) {
           ? "手动"
           : token.lastErrorStage === "request"
             ? "请求"
-            : token.lastErrorStage || "";
+            : token.lastErrorStage === "enable_test"
+              ? "启用验证"
+              : token.lastErrorStage || "";
 
   const modal = document.createElement("div");
   modal.className = "modal form-modal";
@@ -1402,6 +1404,11 @@ async function toggleToken(tokenId, enable) {
       loadTokens();
     } else {
       showToast(data.message || "操作失败", enable ? "warning" : "error");
+      // 启用验证失败时也刷新列表，以显示后端记录的错误详情
+      if (enable) {
+        skipAnimation = true;
+        loadTokens();
+      }
     }
   } catch (error) {
     hideLoading();

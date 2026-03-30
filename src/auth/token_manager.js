@@ -1263,6 +1263,30 @@ class TokenManager {
   async enableTokenById(tokenId) {
     try {
       const tokenData = await this.findTokenById(tokenId);
+
+      // 辅助函数：将启用验证失败的错误信息写入凭证存储
+      const saveEnableError = async (errorMessage) => {
+        try {
+          const allTokens = await this.store.readAll();
+          const salt = await this.store.getSalt();
+          const index = allTokens.findIndex(
+            (token) => generateTokenId(token.refresh_token, salt) === tokenId,
+          );
+          if (index !== -1) {
+            allTokens[index] = {
+              ...allTokens[index],
+              lastError: errorMessage,
+              lastErrorTime: new Date().toISOString(),
+              lastErrorStage: "enable_test",
+            };
+            await this.store.writeAll(allTokens);
+            await this.reload();
+          }
+        } catch (e) {
+          log.error(`[启用检测] 保存错误信息失败: ${e.message}`);
+        }
+      };
+
       if (!tokenData) {
         return { success: false, message: "Token不存在" };
       }
@@ -1283,14 +1307,18 @@ class TokenManager {
           log.warn(
             `[启用检测] token ${tokenId} 刷新失败(${statusCode}): ${error.message}`,
           );
+          const msg = `凭证不可用，刷新失败(${statusCode}): ${error.message}`;
+          await saveEnableError(msg);
           return {
             success: false,
-            message: `凭证不可用，刷新失败(${statusCode}): ${error.message}`,
+            message: msg,
           };
         }
         // 其他错误（如网络问题），也返回失败但提示不同
         log.warn(`[启用检测] token ${tokenId} 刷新失败: ${error.message}`);
-        return { success: false, message: `凭证刷新失败: ${error.message}` };
+        const refreshMsg = `凭证刷新失败: ${error.message}`;
+        await saveEnableError(refreshMsg);
+        return { success: false, message: refreshMsg };
       }
 
       // 步骤2: 尝试获取 projectId（验证账号权限）
@@ -1301,10 +1329,12 @@ class TokenManager {
           tokenData.sub = sub;
         } else if (!tokenData.projectId && !config.skipProjectIdFetch) {
           log.warn(`[启用检测] token ${tokenId} 无法获取 projectId`);
+          const noProjectMsg =
+            "凭证不可用: 无法获取 projectId，该账号可能不支持 Code Assist";
+          await saveEnableError(noProjectMsg);
           return {
             success: false,
-            message:
-              "凭证不可用: 无法获取 projectId，该账号可能不支持 Code Assist",
+            message: noProjectMsg,
           };
         }
       } catch (error) {
@@ -1313,9 +1343,11 @@ class TokenManager {
           log.warn(
             `[启用检测] token ${tokenId} 权限验证失败(${statusCode}): ${error.message}`,
           );
+          const permMsg = `凭证不可用，权限验证失败(${statusCode}): ${error.message}`;
+          await saveEnableError(permMsg);
           return {
             success: false,
-            message: `凭证不可用，权限验证失败(${statusCode}): ${error.message}`,
+            message: permMsg,
           };
         }
         // 非致命错误，继续启用（可能只是暂时性网络问题）
@@ -1332,9 +1364,11 @@ class TokenManager {
           log.warn(
             `[启用检测] token ${tokenId} 测试消息失败(${testResult.status}): ${testResult.message}`,
           );
+          const testMsg = `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`;
+          await saveEnableError(testMsg);
           return {
             success: false,
-            message: `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`,
+            message: testMsg,
           };
         }
         log.info(`[启用检测] token ${tokenId} 测试消息通过`);

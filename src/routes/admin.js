@@ -1085,12 +1085,13 @@ router.post(
       const result =
         await geminicliTokenManager.fetchProjectIdForToken(tokenId);
       logger.info(
-        `[GeminiCLI] 手动获取ProjectId: ${tokenId} -> ${result.projectId}`,
+        `[GeminiCLI] 手动获取ProjectId: ${tokenId} -> ${result.projectId} (tier: ${result.tier || 'unknown'})`,
       );
       res.json({
         success: true,
-        message: "Project ID获取成功",
+        message: `Project ID获取成功${result.tier ? ` (tier: ${result.tier})` : ""}`,
         projectId: result.projectId,
+        tier: result.tier || null,
       });
     } catch (error) {
       logger.error("[GeminiCLI] 获取ProjectId失败:", error.message);
@@ -1201,6 +1202,7 @@ router.post(
           enable: token.enable,
           email: token.email,
           projectId: token.projectId,
+          tier: token.tier,
         })),
       };
 

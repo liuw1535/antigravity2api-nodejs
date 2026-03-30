@@ -1,5 +1,7 @@
 import geminicliTokenManager from "../auth/geminicli_token_manager.js";
 import config from "../config/config.js";
+import quotaManager from "../auth/quota_manager.js";
+import tokenCooldownManager from "../auth/token_cooldown_manager.js";
 import { createApiError } from "../utils/errors.js";
 import { httpRequest } from "../utils/httpClient.js";
 import { saveBase64Image } from "../utils/imageStorage.js";
@@ -111,10 +113,15 @@ function buildRequestBody(requestBody, model, projectId) {
 
 /**
  * 统一错误处理
+ * 
+ * 429 处理策略（参考 MD 文档第 11.3 节）：
+ * - 429 不禁用凭证，只对当前凭证+当前模型设置冷却
+ * - 从错误响应中解析冷却结束时间
  * @param {Error} error - 错误对象
  * @param {Object} token - Token 对象
+ * @param {string} [model] - 模型名称（用于模型级冷却）
  */
-async function handleApiError(error, token) {
+async function handleApiError(error, token, model) {
   const status = getUpstreamStatus(error);
   const errorBody = await readUpstreamErrorBody(error);
 
@@ -135,6 +142,42 @@ async function handleApiError(error, token) {
   }
 
   if (status === 429) {
+    // 尝试解析冷却时间并设置模型级冷却
+    if (model && token?.refresh_token) {
+      try {
+        const salt = await geminicliTokenManager.getSalt();
+        const { generateTokenId } = await import("../utils/idGenerator.js");
+        const tokenId = generateTokenId(token.refresh_token, salt);
+
+        // 尝试从错误体中提取 resetTime
+        let resetTimestamp = null;
+        try {
+          const parsed = typeof errorBody === "string" ? JSON.parse(errorBody) : errorBody;
+          const resetTimeStr =
+            parsed?.error?.details?.[0]?.metadata?.resetTime ||
+            parsed?.resetTime ||
+            parsed?.error?.resetTime;
+          if (resetTimeStr) {
+            const ms = Date.parse(resetTimeStr);
+            if (Number.isFinite(ms) && ms > Date.now()) {
+              resetTimestamp = ms;
+            }
+          }
+        } catch {
+          // 解析失败，使用默认冷却时间
+        }
+
+        // 如果无法从响应解析到 resetTime，默认冷却 5 分钟
+        if (!resetTimestamp) {
+          resetTimestamp = Date.now() + 5 * 60 * 1000;
+        }
+
+        tokenCooldownManager.setCooldown(tokenId, model, resetTimestamp);
+      } catch {
+        // 设置冷却失败不影响错误抛出
+      }
+    }
+
     throw createApiError(
       `请求频率过高，请稍后重试。错误详情: ${errorBody}`,
       status,
@@ -213,7 +256,7 @@ export async function generateStreamResponse(
     try {
       processor.close();
     } catch {}
-    await handleApiError(error, token);
+    await handleApiError(error, token, model);
   }
 }
 
@@ -255,7 +298,7 @@ export async function generateNoStreamResponse(requestBody, token, model) {
       dumpFinalRawResponse,
     });
   } catch (error) {
-    await handleApiError(error, token);
+    await handleApiError(error, token, model);
   }
 
   // 处理 GeminiCLI 的 response 包装格式
@@ -326,6 +369,7 @@ export function recordRequest(token) {
 
 /**
  * 获取 Gemini CLI 额度信息
+ * 优先使用 retrieveUserQuota，失败时回退到 fetchAvailableModels
  * @param {Object} token - Token 对象（必须包含 projectId）
  * @returns {Promise<Object>} quotas: { [modelId]: { r, t } }
  */
@@ -334,59 +378,114 @@ export async function getGeminiCliQuotas(token) {
     throw createApiError("Token 缺少 projectId，请先获取 Project ID", 400);
   }
 
-  const geminicliConfig = config.geminicli?.api || {};
   const baseUrl = getGeminiCliBaseUrl();
-  const url = `${baseUrl}/v1internal:retrieveUserQuota`;
+  const geminicliConfig = config.geminicli?.api || {};
 
-  const headers = {
-    Host: geminicliConfig.host || "cloudcode-pa.googleapis.com",
-    "User-Agent":
-      geminicliConfig.userAgent || "GeminiCLI/0.1.5 (Windows; AMD64)",
-    Authorization: `Bearer ${token.access_token}`,
-    "Content-Type": "application/json",
-    "Accept-Encoding": "gzip",
-  };
+  // ===== 第一优先：retrieveUserQuota =====
+  try {
+    const url = `${baseUrl}/v1internal:retrieveUserQuota`;
+    const headers = {
+      Host: geminicliConfig.host || "cloudcode-pa.googleapis.com",
+      "User-Agent":
+        geminicliConfig.userAgent || "GeminiCLI/0.1.5 (Windows; AMD64)",
+      Authorization: `Bearer ${token.access_token}`,
+      "Content-Type": "application/json",
+      "Accept-Encoding": "gzip",
+    };
 
-  const response = await httpRequest({
-    method: "POST",
-    url,
-    headers,
-    data: { project: token.projectId },
-    timeout: config.timeout,
-  });
+    const response = await httpRequest({
+      method: "POST",
+      url,
+      headers,
+      data: { project: token.projectId },
+      timeout: config.timeout,
+    });
 
-  const buckets = response?.data?.buckets || [];
-  const quotas = {};
+    const buckets = response?.data?.buckets || [];
+    const quotas = {};
 
-  for (const bucket of buckets) {
-    const modelId = bucket?.modelId || bucket?.model || bucket?.id;
-    const fractionRaw = Number(bucket?.remainingFraction);
-    if (!modelId || !Number.isFinite(fractionRaw)) continue;
+    for (const bucket of buckets) {
+      const modelId = bucket?.modelId || bucket?.model || bucket?.id;
+      const fractionRaw = Number(bucket?.remainingFraction);
+      if (!modelId || !Number.isFinite(fractionRaw)) continue;
 
-    const remainingFraction = Math.min(1, Math.max(0, fractionRaw));
-    const resetTime =
-      typeof bucket?.resetTime === "string" ? bucket.resetTime : null;
+      const remainingFraction = Math.min(1, Math.max(0, fractionRaw));
+      const resetTime =
+        typeof bucket?.resetTime === "string" ? bucket.resetTime : null;
 
-    if (!quotas[modelId]) {
-      quotas[modelId] = { r: remainingFraction, t: resetTime };
-      continue;
-    }
+      if (!quotas[modelId]) {
+        quotas[modelId] = { r: remainingFraction, t: resetTime };
+        continue;
+      }
 
-    // 同一模型取更低的剩余额度
-    if (remainingFraction < quotas[modelId].r) {
-      quotas[modelId].r = remainingFraction;
-    }
+      // 同一模型取更低的剩余额度
+      if (remainingFraction < quotas[modelId].r) {
+        quotas[modelId].r = remainingFraction;
+      }
 
-    // 取更早的重置时间
-    if (resetTime) {
-      const currentReset = quotas[modelId].t;
-      if (!currentReset) {
-        quotas[modelId].t = resetTime;
-      } else if (Date.parse(resetTime) < Date.parse(currentReset)) {
-        quotas[modelId].t = resetTime;
+      // 取更早的重置时间
+      if (resetTime) {
+        const currentReset = quotas[modelId].t;
+        if (!currentReset) {
+          quotas[modelId].t = resetTime;
+        } else if (Date.parse(resetTime) < Date.parse(currentReset)) {
+          quotas[modelId].t = resetTime;
+        }
       }
     }
-  }
 
-  return quotas;
+    return quotas;
+  } catch (primaryError) {
+    // retrieveUserQuota 失败，尝试 fetchAvailableModels 回退
+    const primaryStatus =
+      primaryError.response?.status || primaryError.status || primaryError.statusCode || 500;
+
+    // 如果是认证/权限错误，不需要回退
+    if (primaryStatus === 401 || primaryStatus === 403) {
+      throw primaryError;
+    }
+
+    try {
+      const fallbackUrl = `${baseUrl}/v1internal:fetchAvailableModels`;
+      const fallbackHeaders = {
+        Host: geminicliConfig.host || "cloudcode-pa.googleapis.com",
+        "User-Agent":
+          geminicliConfig.userAgent || "GeminiCLI/0.1.5 (Windows; AMD64)",
+        Authorization: `Bearer ${token.access_token}`,
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip",
+      };
+
+      const fallbackResponse = await httpRequest({
+        method: "POST",
+        url: fallbackUrl,
+        headers: fallbackHeaders,
+        data: {},
+        timeout: config.timeout,
+      });
+
+      const data = fallbackResponse?.data;
+      const quotas = {};
+
+      // fetchAvailableModels 返回格式: { models: { modelId: { quotaInfo: { remainingFraction, resetTime } } } }
+      Object.entries(data?.models || {}).forEach(([modelId, modelData]) => {
+        const quotaInfo = modelData?.quotaInfo;
+        if (!quotaInfo) return;
+
+        const fractionRaw = Number(quotaInfo.remainingFraction);
+        if (!Number.isFinite(fractionRaw)) return;
+
+        const remainingFraction = Math.min(1, Math.max(0, fractionRaw));
+        const resetTime =
+          typeof quotaInfo.resetTime === "string" ? quotaInfo.resetTime : null;
+
+        quotas[modelId] = { r: remainingFraction, t: resetTime };
+      });
+
+      return quotas;
+    } catch (fallbackError) {
+      // 两个接口都失败了，抛出原始错误
+      throw primaryError;
+    }
+  }
 }

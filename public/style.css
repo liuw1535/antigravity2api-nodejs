@@ -962,6 +962,19 @@ html.tab-logs .content {
   gap: 0.5rem;
 }
 
+/* Token Tier 标签 */
+.token-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--bg-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
 .btn-icon {
   width: 24px;
   height: 24px;

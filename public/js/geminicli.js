@@ -339,7 +339,22 @@ function renderGeminiCliTokens(tokens) {
       const safeEmailJs = escapeJs(token.email || "");
       const safeProjectId = escapeHtml(token.projectId || "");
       const hasProjectId = !!token.projectId;
+      const tierLabel = token.tier
+        ? token.tier === "ultra"
+          ? "💎 Ultra"
+          : token.tier === "pro"
+            ? "⭐ Pro"
+            : token.tier === "free"
+              ? "🆓 Free"
+              : `📋 ${escapeHtml(token.tier)}`
+        : "";
       const lastError = token.lastError ? escapeHtml(token.lastError) : "";
+      const disableReason = token.disableReason
+        ? escapeHtml(token.disableReason)
+        : "";
+      const disableTimeStr = token.disableTime
+        ? new Date(token.disableTime).toLocaleString("zh-CN")
+        : "";
       const lastErrorTimeStr = token.lastErrorTime
         ? new Date(token.lastErrorTime).toLocaleString("zh-CN")
         : "";
@@ -352,7 +367,9 @@ function renderGeminiCliTokens(tokens) {
               ? "手动"
               : token.lastErrorStage === "request"
                 ? "请求"
-                : token.lastErrorStage || "";
+                : token.lastErrorStage === "enable_test"
+                  ? "启用验证"
+                  : token.lastErrorStage || "";
 
       return `
         <div class="token-card ${!token.enable ? "disabled" : ""}" id="geminicli-card-${escapeHtml(cardId)}">
@@ -364,9 +381,11 @@ function renderGeminiCliTokens(tokens) {
                     <button class="btn-icon token-refresh-btn" onclick="refreshGeminiCliToken('${safeTokenId}')" title="刷新Token">🔄</button>
                 </div>
                 <div class="token-header-right">
+                    ${tierLabel ? `<span class="token-tier-badge">${tierLabel}</span>` : ""}
                     <span class="token-id">#${tokenNumber}</span>
                 </div>
             </div>
+            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? "禁用时间: " + disableTimeStr : ""}">⚠️ ${disableReason}${disableTimeStr ? " (" + disableTimeStr + ")" : ""}</div>` : ""}
             ${lastError ? `<div class="token-error-detail">🧾 ${lastError}${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class=\"token-error-meta\">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}</div>` : ""}
             <div class="token-info">
                 <div class="info-row editable sensitive-row" onclick="editGeminiCliField(event, '${safeTokenId}', 'email', '${safeEmailJs}')" title="点击编辑">
@@ -474,7 +493,8 @@ async function fetchGeminiCliProjectId(tokenId) {
     const data = await response.json();
     hideLoading();
     if (data.success) {
-      showToast(`Project ID 获取成功: ${data.projectId}`, "success");
+      const tierInfo = data.tier ? ` (tier: ${data.tier})` : "";
+      showToast(`Project ID 获取成功: ${data.projectId}${tierInfo}`, "success");
       loadGeminiCliTokens();
     } else {
       showToast(`获取失败: ${data.message || "未知错误"}`, "error");
@@ -596,6 +616,10 @@ async function toggleGeminiCliToken(tokenId, enable) {
       loadGeminiCliTokens();
     } else {
       showToast(data.message || "操作失败", enable ? "warning" : "error");
+      // 启用验证失败时也刷新列表，以显示后端记录的错误详情
+      if (enable) {
+        loadGeminiCliTokens();
+      }
     }
   } catch (error) {
     hideLoading();
