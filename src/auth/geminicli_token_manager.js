@@ -884,9 +884,32 @@ class GeminiCliTokenManager {
       throw new TokenError("Token不存在", null, 404);
     }
 
+    return this.fetchProjectIdForTokenData(tokenData, tokenId);
+  }
+
+  /**
+   * 根据 token 数据获取并更新 projectId
+   * @param {Object} tokenData - 完整 token 对象
+   * @param {string|null} tokenId - 安全的 token ID，可选
+   * @returns {Promise<Object>} 包含 projectId 和 tier 的结果
+   */
+  async fetchProjectIdForTokenData(tokenData, tokenId = null) {
+    if (!tokenData) {
+      throw new TokenError("Token不存在", null, 404);
+    }
+
+    const effectiveTokenId =
+      tokenId ||
+      (await this.store.getSalt().then((salt) =>
+        generateTokenId(tokenData.refresh_token, salt),
+      ));
+
     // 确保 token 未过期
     if (this.isExpired(tokenData)) {
-      await this.refreshToken(tokenData);
+      const refreshedToken = await this.refreshToken(tokenData);
+      if (refreshedToken) {
+        tokenData = refreshedToken;
+      }
     }
 
     const result = await this.fetchProjectId(tokenData);
@@ -906,7 +929,7 @@ class GeminiCliTokenManager {
     const allTokens = await this.store.readAll();
     const salt = await this.store.getSalt();
     const index = allTokens.findIndex(
-      (t) => generateTokenId(t.refresh_token, salt) === tokenId,
+      (t) => generateTokenId(t.refresh_token, salt) === effectiveTokenId,
     );
     if (index !== -1) {
       allTokens[index].projectId = projectId;
@@ -927,7 +950,50 @@ class GeminiCliTokenManager {
       }
     }
 
-    return { projectId, tier };
+    return { projectId, tier, tokenId: effectiveTokenId };
+  }
+
+  /**
+   * 批量获取已启用 Gemini CLI Token 的 Project ID
+   * @returns {Promise<Object>} 批量处理结果
+   */
+  async batchFetchProjectIds() {
+    const allTokens = await this.store.readAll();
+    const salt = await this.store.getSalt();
+    const enabledTokens = allTokens.filter((token) => token.enable !== false);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const token of enabledTokens) {
+      const currentTokenId = generateTokenId(token.refresh_token, salt);
+      try {
+        const result = await this.fetchProjectIdForTokenData(token, currentTokenId);
+        successCount += 1;
+        results.push({
+          tokenId: currentTokenId,
+          success: true,
+          projectId: result.projectId,
+          tier: result.tier || null,
+        });
+      } catch (error) {
+        failCount += 1;
+        results.push({
+          tokenId: currentTokenId,
+          success: false,
+          message: error.message,
+          status: error.statusCode || error.status || 500,
+        });
+      }
+    }
+
+    return {
+      total: enabledTokens.length,
+      successCount,
+      failCount,
+      results,
+    };
   }
 
   /**

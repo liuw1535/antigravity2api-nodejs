@@ -507,6 +507,51 @@ async function fetchGeminiCliProjectId(tokenId) {
   }
 }
 
+// 批量获取所有已启用 Gemini CLI Token 的 Project ID
+async function batchFetchGeminiCliProjectIds() {
+  if (!cachedGeminiCliTokens || cachedGeminiCliTokens.length === 0) {
+    showToast("没有可用的 Gemini CLI Token", "warning");
+    return;
+  }
+
+  const enabledTokens = cachedGeminiCliTokens.filter((token) => token.enable);
+  if (enabledTokens.length === 0) {
+    showToast("没有已启用的 Gemini CLI Token", "warning");
+    return;
+  }
+
+  showLoading(`正在批量获取 Project ID (0/${enabledTokens.length})...`);
+
+  try {
+    const response = await authFetch(
+      "/admin/geminicli/tokens/batch-fetch-project-ids",
+      {
+        method: "POST",
+      },
+    );
+    const data = await response.json();
+
+    hideLoading();
+
+    if (data.success) {
+      const successCount = Number(data.successCount) || 0;
+      const failCount = Number(data.failCount) || 0;
+      showToast(
+        `批量获取完成: 成功 ${successCount} 个，失败 ${failCount} 个`,
+        successCount > 0 ? "success" : "warning",
+      );
+      loadGeminiCliTokens();
+    } else {
+      showToast(`批量获取失败: ${data.message || "未知错误"}`, "error");
+    }
+  } catch (error) {
+    hideLoading();
+    if (error.message !== "Unauthorized") {
+      showToast(`批量获取失败: ${error.message}`, "error");
+    }
+  }
+}
+
 // 编辑 Gemini CLI Token 字段
 function editGeminiCliField(event, tokenId, field, currentValue) {
   event.stopPropagation();

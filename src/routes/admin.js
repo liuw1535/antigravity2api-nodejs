@@ -1006,7 +1006,9 @@ router.put(
         if (result.success) {
           logger.info(`[GeminiCLI] 启用Token(已验证): ${tokenId}`);
         } else {
-          logger.warn(`[GeminiCLI] 启用Token验证失败: ${tokenId} - ${result.message}`);
+          logger.warn(
+            `[GeminiCLI] 启用Token验证失败: ${tokenId} - ${result.message}`,
+          );
         }
         res.json(result);
       } else {
@@ -1085,7 +1087,7 @@ router.post(
       const result =
         await geminicliTokenManager.fetchProjectIdForToken(tokenId);
       logger.info(
-        `[GeminiCLI] 手动获取ProjectId: ${tokenId} -> ${result.projectId} (tier: ${result.tier || 'unknown'})`,
+        `[GeminiCLI] 手动获取ProjectId: ${tokenId} -> ${result.projectId} (tier: ${result.tier || "unknown"})`,
       );
       res.json({
         success: true,
@@ -1096,6 +1098,29 @@ router.post(
     } catch (error) {
       logger.error("[GeminiCLI] 获取ProjectId失败:", error.message);
       const status = error.statusCode || 500;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  },
+);
+
+// 批量获取所有已启用 Gemini CLI Token 的 Project ID
+router.post(
+  "/geminicli/tokens/batch-fetch-project-ids",
+  cookieAuthMiddleware,
+  async (req, res) => {
+    try {
+      const result = await geminicliTokenManager.batchFetchProjectIds();
+      logger.info(
+        `[GeminiCLI] 批量获取ProjectId完成: 成功 ${result.successCount} 个，失败 ${result.failCount} 个，共 ${result.total} 个`,
+      );
+      res.json({
+        success: true,
+        message: `批量获取完成: 成功 ${result.successCount} 个，失败 ${result.failCount} 个`,
+        ...result,
+      });
+    } catch (error) {
+      logger.error("[GeminiCLI] 批量获取ProjectId失败:", error.message);
+      const status = error.statusCode || error.status || 500;
       res.status(status).json({ success: false, message: error.message });
     }
   },
