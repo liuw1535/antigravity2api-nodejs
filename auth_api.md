@@ -184,6 +184,47 @@ Content-Type: application/json
 }
 ```
 
+---
+
+## 4. 查询 Gemini CLI 额度
+
+### 接口
+
+`GET /admin/geminicli/tokens/:tokenId/quotas`
+
+### 说明
+
+- 仅适用于 `geminicli` 模式账号
+- 若 Token 过期会自动刷新，失败时返回 400
+- 支持 `refresh=true` 强制刷新
+
+### Query 参数
+
+| 参数      | 类型   | 必填 | 说明                  |
+| --------- | ------ | ---: | --------------------- |
+| `refresh` | string |   否 | `true` 时强制刷新缓存 |
+
+### 返回示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "lastUpdated": 1765109350660,
+    "models": {
+      "gemini-2.5-pro": {
+        "remaining": 0.75,
+        "resetTime": "01-15 08:00",
+        "resetTimeRaw": "2025-01-15T00:00:00Z"
+      }
+    },
+    "requestCounts": {
+      "gemini": 3
+    }
+  }
+}
+```
+
 说明：
 
 - 当提供 [`callbackUrl`](auth_api.md) 时，服务端会自动解析出 `code` 与 `port`

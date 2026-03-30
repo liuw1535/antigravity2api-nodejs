@@ -16,6 +16,8 @@ const GEMINICLI_SCOPES = [
 
 let geminicliOauthPort = null;
 
+const GEMINICLI_QUOTA_CARD_ID_PREFIX = "geminicli";
+
 // 获取 Gemini CLI OAuth URL
 function generateGeminiCliOAuthPorts(count = 1) {
   const ports = new Set();
@@ -326,7 +328,7 @@ function renderGeminiCliTokens(tokens) {
   tokenList.innerHTML = filteredTokens
     .map((token, index) => {
       const tokenId = token.id;
-      const cardId = tokenId.substring(0, 8);
+      const cardId = `${GEMINICLI_QUOTA_CARD_ID_PREFIX}-${tokenId.substring(0, 8)}`;
       const originalIndex = cachedGeminiCliTokens.findIndex(
         (t) => t.id === token.id,
       );
@@ -367,7 +369,15 @@ function renderGeminiCliTokens(tokens) {
                 <span class="token-id-label">🔑</span>
                 <span class="token-id-value">${escapeHtml(tokenId.length > 24 ? tokenId.substring(0, 12) + "..." + tokenId.substring(tokenId.length - 8) : tokenId)}</span>
             </div>
+            <div class="token-quota-inline" id="quota-inline-${escapeHtml(cardId)}">
+                <div class="quota-inline-header" onclick="toggleQuotaExpand('${escapeJs(cardId)}', '${safeTokenId}', 'geminicli')">
+                    <span class="quota-inline-summary" id="quota-summary-${escapeHtml(cardId)}">📊 加载中...</span>
+                    <span class="quota-inline-toggle" id="quota-toggle-${escapeHtml(cardId)}">▼</span>
+                </div>
+                <div class="quota-inline-detail hidden" id="quota-detail-${escapeHtml(cardId)}"></div>
+            </div>
             <div class="token-actions">
+                <button class="btn btn-info btn-xs" onclick="showQuotaModal('${safeTokenId}', 'geminicli')" title="查看额度">📊 详情</button>
                 <button class="btn ${token.enable ? "btn-warning" : "btn-success"} btn-xs" onclick="toggleGeminiCliToken('${safeTokenId}', ${!token.enable})" title="${token.enable ? "禁用" : "启用"}">
                     ${token.enable ? "⏸️ 禁用" : "▶️ 启用"}
                 </button>
@@ -377,6 +387,14 @@ function renderGeminiCliTokens(tokens) {
     `;
     })
     .join("");
+
+  filteredTokens.forEach((token) => {
+    loadTokenQuotaSummary(
+      token.id,
+      "geminicli",
+      `${GEMINICLI_QUOTA_CARD_ID_PREFIX}-${token.id.substring(0, 8)}`,
+    );
+  });
 
   updateSensitiveInfoDisplay();
 }

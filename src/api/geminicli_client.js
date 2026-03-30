@@ -1,6 +1,7 @@
 import geminicliTokenManager from "../auth/geminicli_token_manager.js";
 import config from "../config/config.js";
 import { createApiError } from "../utils/errors.js";
+import { httpRequest } from "../utils/httpClient.js";
 import { saveBase64Image } from "../utils/imageStorage.js";
 import {
   collectStreamChunk,
@@ -68,6 +69,26 @@ function buildApiUrl(stream = true) {
         "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse"
     : geminicliConfig.noStreamUrl ||
         "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
+}
+
+/**
+ * 获取 Gemini CLI 基础 URL（支持从完整 URL 解析）
+ * @returns {string}
+ */
+function getGeminiCliBaseUrl() {
+  const geminicliConfig = config.geminicli?.api || {};
+  if (geminicliConfig.baseUrl) return geminicliConfig.baseUrl;
+
+  const sampleUrl = geminicliConfig.url || geminicliConfig.noStreamUrl;
+  if (sampleUrl) {
+    try {
+      return new URL(sampleUrl).origin;
+    } catch {
+      // ignore
+    }
+  }
+
+  return "https://cloudcode-pa.googleapis.com";
 }
 
 /**
@@ -300,4 +321,71 @@ export function recordRequest(token) {
   if (token && token.refresh_token) {
     geminicliTokenManager.incrementRequestCount(token.refresh_token);
   }
+}
+
+/**
+ * 获取 Gemini CLI 额度信息
+ * @param {Object} token - Token 对象（必须包含 projectId）
+ * @returns {Promise<Object>} quotas: { [modelId]: { r, t } }
+ */
+export async function getGeminiCliQuotas(token) {
+  if (!token?.projectId) {
+    throw createApiError("Token 缺少 projectId，请先获取 Project ID", 400);
+  }
+
+  const geminicliConfig = config.geminicli?.api || {};
+  const baseUrl = getGeminiCliBaseUrl();
+  const url = `${baseUrl}/v1internal:retrieveUserQuota`;
+
+  const headers = {
+    Host: geminicliConfig.host || "cloudcode-pa.googleapis.com",
+    "User-Agent":
+      geminicliConfig.userAgent || "GeminiCLI/0.1.5 (Windows; AMD64)",
+    Authorization: `Bearer ${token.access_token}`,
+    "Content-Type": "application/json",
+    "Accept-Encoding": "gzip",
+  };
+
+  const response = await httpRequest({
+    method: "POST",
+    url,
+    headers,
+    data: { project: token.projectId },
+    timeout: config.timeout,
+  });
+
+  const buckets = response?.data?.buckets || [];
+  const quotas = {};
+
+  for (const bucket of buckets) {
+    const modelId = bucket?.modelId || bucket?.model || bucket?.id;
+    const fractionRaw = Number(bucket?.remainingFraction);
+    if (!modelId || !Number.isFinite(fractionRaw)) continue;
+
+    const remainingFraction = Math.min(1, Math.max(0, fractionRaw));
+    const resetTime =
+      typeof bucket?.resetTime === "string" ? bucket.resetTime : null;
+
+    if (!quotas[modelId]) {
+      quotas[modelId] = { r: remainingFraction, t: resetTime };
+      continue;
+    }
+
+    // 同一模型取更低的剩余额度
+    if (remainingFraction < quotas[modelId].r) {
+      quotas[modelId].r = remainingFraction;
+    }
+
+    // 取更早的重置时间
+    if (resetTime) {
+      const currentReset = quotas[modelId].t;
+      if (!currentReset) {
+        quotas[modelId].t = resetTime;
+      } else if (Date.parse(resetTime) < Date.parse(currentReset)) {
+        quotas[modelId].t = resetTime;
+      }
+    }
+  }
+
+  return quotas;
 }

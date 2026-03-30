@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import express from "express";
 import { getModelsWithQuotas } from "../api/client.js";
+import { getGeminiCliQuotas } from "../api/geminicli_client.js";
 import geminicliTokenManager from "../auth/geminicli_token_manager.js";
 import { generateToken, verifyToken } from "../auth/jwt.js";
 import oauthManager from "../auth/oauth_manager.js";
@@ -1070,6 +1071,81 @@ router.post(
     } catch (error) {
       logger.error("[GeminiCLI] 获取ProjectId失败:", error.message);
       const status = error.statusCode || 500;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  },
+);
+
+// 获取 Gemini CLI Token 的额度信息
+router.get(
+  "/geminicli/tokens/:tokenId/quotas",
+  cookieAuthMiddleware,
+  async (req, res) => {
+    try {
+      const { tokenId } = req.params;
+      const forceRefresh = req.query.refresh === "true";
+
+      let tokenData = await geminicliTokenManager.findTokenById(tokenId);
+      if (!tokenData) {
+        return res.status(404).json({ success: false, message: "Token不存在" });
+      }
+
+      const isDisabled = tokenData.enable === false;
+      let quotaData = quotaManager.getQuota(tokenId);
+
+      if (isDisabled) {
+        if (!quotaData) {
+          quotaData = { lastUpdated: null, models: {}, requestCounts: {} };
+        }
+      } else {
+        if (geminicliTokenManager.isExpired(tokenData)) {
+          try {
+            tokenData = await geminicliTokenManager.refreshToken(tokenData);
+          } catch (error) {
+            logger.error("[GeminiCLI] 刷新token失败:", error.message);
+            return res.status(400).json({
+              success: false,
+              message: "Google Token已过期且刷新失败，请重新登录Google账号",
+            });
+          }
+        }
+
+        if (forceRefresh) {
+          quotaData = null;
+        }
+
+        if (!quotaData) {
+          const quotas = await getGeminiCliQuotas(tokenData);
+          quotaManager.updateQuota(tokenId, quotas);
+          quotaData = quotaManager.getQuota(tokenId) || {
+            lastUpdated: Date.now(),
+            models: quotas,
+            requestCounts: {},
+          };
+        }
+      }
+
+      const modelsWithBeijingTime = {};
+      Object.entries(quotaData.models || {}).forEach(([modelId, quota]) => {
+        modelsWithBeijingTime[modelId] = {
+          remaining: quota.r,
+          resetTime: quotaManager.convertToBeijingTime(quota.t),
+          resetTimeRaw: quota.t,
+        };
+      });
+
+      res.json({
+        success: true,
+        data: {
+          lastUpdated: quotaData.lastUpdated,
+          models: modelsWithBeijingTime,
+          requestCounts: quotaData.requestCounts || {},
+        },
+      });
+    } catch (error) {
+      const status =
+        error.statusCode || error.status || error.response?.status || 500;
+      logger.error("[GeminiCLI] 获取额度失败:", error.message);
       res.status(status).json({ success: false, message: error.message });
     }
   },
