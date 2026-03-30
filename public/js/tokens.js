@@ -1314,7 +1314,7 @@ function showTokenDetail(tokenId) {
                 ? `
             <div class="form-group compact">
                 <label>🧾 最近错误</label>
-                <div class="token-error-detail">
+                <div class="token-error-detail" style="max-height: 8em; overflow-y: auto;">
                     ${lastError}
                     ${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class="token-error-meta">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}
                 </div>
@@ -1327,7 +1327,7 @@ function showTokenDetail(tokenId) {
                 ? `
             <div class="form-group compact">
                 <label>⚠️ 禁用原因</label>
-                <div class="token-disable-detail" style="padding: 0.5rem; background: var(--danger-bg, rgba(220,53,69,0.1)); border-radius: 6px; font-size: 0.85rem; color: var(--danger, #dc3545); word-break: break-all;">${disableReason}${disableTimeStr ? '<br><span style="color: var(--text-light); font-size: 0.8rem;">禁用时间: ' + disableTimeStr + "</span>" : ""}</div>
+                <div class="token-disable-detail" style="padding: 0.5rem; background: var(--danger-bg, rgba(220,53,69,0.1)); border-radius: 6px; font-size: 0.85rem; color: var(--danger, #dc3545); word-break: break-all; max-height: 8em; overflow-y: auto;">${disableReason}${disableTimeStr ? '<br><span style="color: var(--text-light); font-size: 0.8rem;">禁用时间: ' + disableTimeStr + "</span>" : ""}</div>
             </div>
             `
                 : ""

@@ -751,6 +751,8 @@ html.tab-logs .content {
   line-height: 1.4;
   word-break: break-all;
   border-left: 3px solid var(--danger, #dc3545);
+  max-height: 4.5em;
+  overflow-y: auto;
 }
 
 .token-error-detail {
@@ -760,6 +762,8 @@ html.tab-logs .content {
   font-size: 0.85rem;
   color: var(--warning, #f59e0b);
   word-break: break-all;
+  max-height: 4.5em;
+  overflow-y: auto;
 }
 
 .token-error-meta {
@@ -1448,6 +1452,8 @@ html.tab-logs .content {
   padding: 1.25rem;
   max-width: 400px;
   width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
   animation: scaleIn 0.2s;
   border: 1px solid rgba(255, 255, 255, 0.5);
