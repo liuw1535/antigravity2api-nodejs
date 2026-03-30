@@ -1216,24 +1216,24 @@ class TokenManager {
     const apiHost = config.api.host;
     const noStreamUrl = config.api.noStreamUrl;
 
-    const testRequestBody = {
-      project: token.projectId,
-      requestId: generateRequestId(),
-      request: {
-        contents: [{ role: "user", parts: [{ text: "hi" }] }],
-        generationConfig: {
-          maxOutputTokens: 1,
-          candidateCount: 1,
+    const sendRequest = async () => {
+      const testRequestBody = {
+        project: token.projectId,
+        requestId: generateRequestId(),
+        request: {
+          contents: [{ role: "user", parts: [{ text: "hi" }] }],
+          generationConfig: {
+            maxOutputTokens: 1,
+            candidateCount: 1,
+          },
+          sessionId: generateSessionId(),
         },
-        sessionId: generateSessionId(),
-      },
-      model: "gemini-2.5-flash",
-      userAgent: "antigravity",
-      requestType: "agent",
-    };
+        model: "gemini-2.5-flash",
+        userAgent: "antigravity",
+        requestType: "agent",
+      };
 
-    try {
-      await httpRequest({
+      return httpRequest({
         method: "POST",
         url: noStreamUrl,
         headers: {
@@ -1246,6 +1246,33 @@ class TokenManager {
         data: testRequestBody,
         timeout: 30000,
       });
+    };
+
+    const shouldRetryWithProjectId = (status, message) => {
+      const text = String(message || "").toLowerCase();
+      return (
+        status === 400 &&
+        (text.includes("projectid") ||
+          text.includes("project id") ||
+          text.includes("project is required") ||
+          text.includes("缺少 projectid") ||
+          text.includes("缺少 project id") ||
+          text.includes("无法获取 projectid"))
+      );
+    };
+
+    try {
+      if (!token.projectId) {
+        const result = await this.fetchProjectId(token);
+        if (result?.projectId) {
+          token.projectId = result.projectId;
+        }
+        if (result?.sub) {
+          token.sub = result.sub;
+        }
+      }
+
+      await sendRequest();
       return { ok: true };
     } catch (error) {
       const status =
@@ -1264,6 +1291,28 @@ class TokenManager {
       }
 
       const errorText = String(errorBody || "");
+
+      if (shouldRetryWithProjectId(status, errorText)) {
+        try {
+          log.info("[Antigravity] 启动检测遇到 projectId 缺失，尝试自动获取后重试");
+          const result = await this.fetchProjectId(token);
+          if (result?.projectId) {
+            token.projectId = result.projectId;
+          }
+          if (result?.sub) {
+            token.sub = result.sub;
+          }
+          if (token.projectId) {
+            await sendRequest();
+            return { ok: true };
+          }
+        } catch (retryError) {
+          log.warn(
+            `[Antigravity] 自动获取 projectId 后重试失败: ${retryError.message}`,
+          );
+        }
+      }
+
       const isContextLimit =
         status === 403 && errorText.includes("The caller does not");
       const shouldDisable =
