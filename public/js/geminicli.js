@@ -243,6 +243,11 @@ async function processGeminiCliOAuthCallback() {
         }
 
         successCount += 1;
+        if (result.disabled) {
+          errors.push(
+            `第${index + 1}行: 已导入但测试消息校验失败，凭证已放入禁用池 - ${result.message || "未知错误"}`,
+          );
+        }
       } catch (error) {
         errors.push(`第${index + 1}行: ${error.message}`);
       }
@@ -253,7 +258,11 @@ async function processGeminiCliOAuthCallback() {
     if (successCount > 0) {
       modal.remove();
       loadGeminiCliTokens();
-      const summary = [`成功添加 ${successCount} 个 Gemini CLI Token`];
+      const activeCount = Math.max(successCount - errors.length, 0);
+      const summary = [`成功接收 ${successCount} 个 Gemini CLI Token`];
+      if (activeCount > 0) {
+        summary.push(`其中 ${activeCount} 个通过测试并已启用`);
+      }
       if (errors.length > 0) {
         summary.push(`失败 ${errors.length} 条`);
       }
@@ -369,7 +378,9 @@ function renderGeminiCliTokens(tokens) {
                 ? "请求"
                 : token.lastErrorStage === "enable_test"
                   ? "启用验证"
-                  : token.lastErrorStage || "";
+                  : token.lastErrorStage === "oauth_submit"
+                    ? "OAuth提交校验"
+                    : token.lastErrorStage || "";
 
       return `
         <div class="token-card ${!token.enable ? "disabled" : ""}" id="geminicli-card-${escapeHtml(cardId)}">

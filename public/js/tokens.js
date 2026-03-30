@@ -723,7 +723,8 @@ async function confirmImportFromModal() {
 
       if (data.success) {
         closeImportModal();
-        showToast("Token添加成功", "success");
+        const toastType = data.disabled ? "warning" : "success";
+        showToast(data.message || "Token添加成功", toastType);
         loadTokens();
       } else {
         showToast(data.message || "添加失败", "error");
@@ -1283,7 +1284,9 @@ function showTokenDetail(tokenId) {
             ? "请求"
             : token.lastErrorStage === "enable_test"
               ? "启用验证"
-              : token.lastErrorStage || "";
+              : token.lastErrorStage === "oauth_submit"
+                ? "OAuth提交校验"
+                : token.lastErrorStage || "";
 
   const modal = document.createElement("div");
   modal.className = "modal form-modal";

@@ -1015,13 +1015,15 @@ class TokenManager {
   async addToken(tokenData) {
     try {
       const allTokens = await this.store.readAll();
+      const salt = await this.store.getSalt();
+      const tokenId = generateTokenId(tokenData.refresh_token, salt);
 
       const newToken = {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_in: tokenData.expires_in || 3599,
         timestamp: tokenData.timestamp || Date.now(),
-        enable: tokenData.enable !== undefined ? tokenData.enable : true,
+        enable: false,
       };
 
       if (tokenData.projectId) {
@@ -1039,9 +1041,30 @@ class TokenManager {
 
       allTokens.push(newToken);
       await this.store.writeAll(allTokens);
-
       await this.reload();
-      return { success: true, message: "Token添加成功" };
+
+      const enableResult = await this.enableTokenById(tokenId, {
+        stage: "oauth_submit",
+      });
+      if (!enableResult.success) {
+        return {
+          success: true,
+          saved: true,
+          validated: false,
+          disabled: true,
+          tokenId,
+          message: enableResult.message || "Token已保存到禁用池",
+        };
+      }
+
+      return {
+        success: true,
+        saved: true,
+        validated: true,
+        disabled: false,
+        tokenId,
+        message: "Token添加成功",
+      };
     } catch (error) {
       log.error("添加Token失败:", error.message);
       return { success: false, message: error.message };
@@ -1240,14 +1263,14 @@ class TokenManager {
         errorBody = error.message || "未知错误";
       }
 
-      // 403 且非 "The caller does not have permission"（后者是上下文超限，非权限问题）
-      if (status === 403) {
-        const isContextLimit = String(errorBody).includes(
-          "The caller does not",
-        );
-        if (!isContextLimit) {
-          return { ok: false, status, message: errorBody };
-        }
+      const errorText = String(errorBody || "");
+      const isContextLimit =
+        status === 403 && errorText.includes("The caller does not");
+      const shouldDisable =
+        (status === 400 || status === 401 || status === 403) && !isContextLimit;
+
+      if (shouldDisable) {
+        return { ok: false, status, message: errorText };
       }
 
       // 其他非致命状态码（如 429 限流、500 临时错误）不阻止启用
@@ -1260,9 +1283,10 @@ class TokenManager {
    * @param {string} tokenId - 安全的 token ID
    * @returns {Promise<Object>} 操作结果
    */
-  async enableTokenById(tokenId) {
+  async enableTokenById(tokenId, options = {}) {
     try {
       const tokenData = await this.findTokenById(tokenId);
+      const errorStage = options.stage || "enable_test";
 
       // 辅助函数：将启用验证失败的错误信息写入凭证存储
       const saveEnableError = async (errorMessage) => {
@@ -1273,11 +1297,15 @@ class TokenManager {
             (token) => generateTokenId(token.refresh_token, salt) === tokenId,
           );
           if (index !== -1) {
+            const errorTime = Date.now();
             allTokens[index] = {
               ...allTokens[index],
+              enable: false,
+              disableReason: errorMessage,
+              disableTime: errorTime,
               lastError: errorMessage,
-              lastErrorTime: new Date().toISOString(),
-              lastErrorStage: "enable_test",
+              lastErrorTime: errorTime,
+              lastErrorStage: errorStage,
             };
             await this.store.writeAll(allTokens);
             await this.reload();

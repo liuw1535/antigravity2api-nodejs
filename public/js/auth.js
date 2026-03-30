@@ -281,6 +281,11 @@ async function processOAuthCallbackModal() {
         if (result.fallbackMode) {
           fallbackCount += 1;
         }
+        if (result.disabled) {
+          errors.push(
+            `第${index + 1}行: 已导入但测试消息校验失败，凭证已放入禁用池 - ${result.message || "未知错误"}`,
+          );
+        }
       } catch (error) {
         errors.push(`第${index + 1}行: ${error.message}`);
       }
@@ -291,7 +296,11 @@ async function processOAuthCallbackModal() {
     if (successCount > 0) {
       modal.remove();
       loadTokens();
-      const summary = [`成功添加 ${successCount} 个Token`];
+      const activeCount = Math.max(successCount - errors.length, 0);
+      const summary = [`成功接收 ${successCount} 个Token`];
+      if (activeCount > 0) {
+        summary.push(`其中 ${activeCount} 个通过测试并已启用`);
+      }
       if (fallbackCount > 0) {
         summary.push(
           `其中 ${fallbackCount} 个账号无资格并已自动使用随机ProjectId`,

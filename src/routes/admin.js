@@ -700,7 +700,10 @@ router.post(
           success: true,
           data: account,
           message: saveResult.message || "Gemini CLI Token添加成功",
-          saved: true,
+          saved: saveResult.saved !== false,
+          validated: saveResult.validated !== false,
+          disabled: saveResult.disabled === true,
+          tokenId: saveResult.tokenId || null,
         });
       } else {
         const saveResult = await tokenManager.addToken(account);
@@ -708,15 +711,18 @@ router.post(
           throw new Error(saveResult.message || "Token保存失败");
         }
 
-        const message = account.hasQuota
-          ? saveResult.message || "Token添加成功"
+        const defaultSuccessMessage = account.hasQuota
+          ? "Token添加成功"
           : "Token添加成功（该账号无资格，已自动使用随机ProjectId）";
         res.json({
           success: true,
           data: account,
-          message,
+          message: saveResult.message || defaultSuccessMessage,
           fallbackMode: !account.hasQuota,
-          saved: true,
+          saved: saveResult.saved !== false,
+          validated: saveResult.validated !== false,
+          disabled: saveResult.disabled === true,
+          tokenId: saveResult.tokenId || null,
         });
       }
     } catch (error) {

@@ -197,7 +197,7 @@ class GeminiCliTokenManager {
 
   /**
    * 安全刷新单个 token（不抛出异常）
-   * 
+   *
    * 错误分类策略（参考 MD 文档第 8.3 节）：
    * - 永久失效：400/401/403 或错误文本含 invalid_grant 等
    * - 临时失败：429/500/502/503/504/网络异常
@@ -222,7 +222,9 @@ class GeminiCliTokenManager {
         statusCode === 400 ||
         statusCode === 401 ||
         statusCode === 403 ||
-        PERMANENT_REFRESH_ERROR_TEXTS.some((t) => rawMessage.toLowerCase().includes(t));
+        PERMANENT_REFRESH_ERROR_TEXTS.some((t) =>
+          rawMessage.toLowerCase().includes(t),
+        );
       if (isPermanent) {
         return { action: "disable", reason };
       }
@@ -393,7 +395,7 @@ class GeminiCliTokenManager {
 
   /**
    * 通过 loadCodeAssist API 获取 projectId 和 tier 信息
-   * 
+   *
    * 优先级链（参考 MD 文档第 6 节）：
    * 1. loadCodeAssist → 提取 cloudaicompanionProject + tier
    * 2. onboardUser → 创建项目并获取 projectId
@@ -437,8 +439,7 @@ class GeminiCliTokenManager {
       const data = loadResponse.data;
 
       // 提取 tier 信息（paidTier 优先，currentTier 其次）
-      const rawTier =
-        data.paidTier?.id || data.currentTier?.id || null;
+      const rawTier = data.paidTier?.id || data.currentTier?.id || null;
       const tier = mapTier(rawTier);
       if (rawTier) {
         log.info(`[GeminiCLI] 检测到 tier: ${rawTier} -> ${tier}`);
@@ -457,13 +458,20 @@ class GeminiCliTokenManager {
 
       // 情况 B：尚未激活或无 projectId，尝试 onboardUser
       log.info("[GeminiCLI] 用户未激活，尝试 onboardUser...");
-      const onboardResult = await this._tryOnboardUser(token, headers, baseUrl, data);
+      const onboardResult = await this._tryOnboardUser(
+        token,
+        headers,
+        baseUrl,
+        data,
+      );
       if (onboardResult) {
         return { projectId: onboardResult, tier };
       }
 
       // onboardUser 也失败了，尝试 Google Cloud 项目列表
-      log.info("[GeminiCLI] onboardUser 未返回 projectId，尝试 Google Cloud 项目列表...");
+      log.info(
+        "[GeminiCLI] onboardUser 未返回 projectId，尝试 Google Cloud 项目列表...",
+      );
       const gcpProjectId = await this._tryGoogleCloudProjectList(token);
       if (gcpProjectId) {
         return { projectId: gcpProjectId, tier };
@@ -479,17 +487,26 @@ class GeminiCliTokenManager {
       }
 
       // 非致命错误时仍尝试 Google Cloud 项目列表回退
-      log.info("[GeminiCLI] loadCodeAssist 失败，尝试 Google Cloud 项目列表回退...");
+      log.info(
+        "[GeminiCLI] loadCodeAssist 失败，尝试 Google Cloud 项目列表回退...",
+      );
       try {
         const gcpProjectId = await this._tryGoogleCloudProjectList(token);
         if (gcpProjectId) {
           return { projectId: gcpProjectId, tier: null };
         }
       } catch (fallbackError) {
-        log.error(`[GeminiCLI] Google Cloud 项目列表回退也失败:`, fallbackError.message);
+        log.error(
+          `[GeminiCLI] Google Cloud 项目列表回退也失败:`,
+          fallbackError.message,
+        );
       }
 
-      throw new TokenError(`获取 projectId 失败: ${error.message}`, tokenId, status);
+      throw new TokenError(
+        `获取 projectId 失败: ${error.message}`,
+        tokenId,
+        status,
+      );
     }
   }
 
@@ -683,7 +700,11 @@ class GeminiCliTokenManager {
    */
   _handleTokenError(error, token) {
     const suffix = token.access_token?.slice(-8) || "unknown";
-    if (error.statusCode === 403 || error.statusCode === 401 || error.statusCode === 400) {
+    if (
+      error.statusCode === 403 ||
+      error.statusCode === 401 ||
+      error.statusCode === 400
+    ) {
       log.warn(
         `[GeminiCLI] ...${suffix}: Token 已失效或错误，已自动禁用该账号`,
       );
@@ -767,13 +788,15 @@ class GeminiCliTokenManager {
   async addToken(tokenData) {
     try {
       const allTokens = await this.store.readAll();
+      const salt = await this.store.getSalt();
+      const tokenId = generateTokenId(tokenData.refresh_token, salt);
 
       const newToken = {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_in: tokenData.expires_in || 3599,
         timestamp: tokenData.timestamp || Date.now(),
-        enable: tokenData.enable !== undefined ? tokenData.enable : true,
+        enable: false,
       };
 
       if (tokenData.email) {
@@ -792,7 +815,28 @@ class GeminiCliTokenManager {
       await this.store.writeAll(allTokens);
 
       await this.reload();
-      return { success: true, message: "Token添加成功" };
+      const enableResult = await this.enableTokenById(tokenId, {
+        stage: "oauth_submit",
+      });
+      if (!enableResult.success) {
+        return {
+          success: true,
+          saved: true,
+          validated: false,
+          disabled: true,
+          tokenId,
+          message: enableResult.message || "Token已保存到禁用池",
+        };
+      }
+
+      return {
+        success: true,
+        saved: true,
+        validated: true,
+        disabled: false,
+        tokenId,
+        message: "Token添加成功",
+      };
     } catch (error) {
       log.error("[GeminiCLI] 添加Token失败:", error.message);
       return { success: false, message: error.message };
@@ -900,9 +944,9 @@ class GeminiCliTokenManager {
 
     const effectiveTokenId =
       tokenId ||
-      (await this.store.getSalt().then((salt) =>
-        generateTokenId(tokenData.refresh_token, salt),
-      ));
+      (await this.store
+        .getSalt()
+        .then((salt) => generateTokenId(tokenData.refresh_token, salt)));
 
     // 确保 token 未过期
     if (this.isExpired(tokenData)) {
@@ -969,7 +1013,10 @@ class GeminiCliTokenManager {
     for (const token of enabledTokens) {
       const currentTokenId = generateTokenId(token.refresh_token, salt);
       try {
-        const result = await this.fetchProjectIdForTokenData(token, currentTokenId);
+        const result = await this.fetchProjectIdForTokenData(
+          token,
+          currentTokenId,
+        );
         successCount += 1;
         results.push({
           tokenId: currentTokenId,
@@ -1069,20 +1116,20 @@ class GeminiCliTokenManager {
       geminicliConfig.noStreamUrl ||
       "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
 
-    const testRequestBody = {
-      model: "gemini-2.5-flash",
-      project: token.projectId,
-      request: {
-        contents: [{ role: "user", parts: [{ text: "hi" }] }],
-        generationConfig: {
-          maxOutputTokens: 1,
-          candidateCount: 1,
+    const sendRequest = async () => {
+      const testRequestBody = {
+        model: "gemini-2.5-flash",
+        project: token.projectId,
+        request: {
+          contents: [{ role: "user", parts: [{ text: "hi" }] }],
+          generationConfig: {
+            maxOutputTokens: 1,
+            candidateCount: 1,
+          },
         },
-      },
-    };
+      };
 
-    try {
-      await httpRequest({
+      return httpRequest({
         method: "POST",
         url: noStreamUrl,
         headers: {
@@ -1096,6 +1143,33 @@ class GeminiCliTokenManager {
         data: testRequestBody,
         timeout: 30000,
       });
+    };
+
+    const shouldRetryWithProjectId = (status, message) => {
+      const text = String(message || "").toLowerCase();
+      return (
+        status === 400 &&
+        (text.includes("projectid") ||
+          text.includes("project id") ||
+          text.includes("project is required") ||
+          text.includes("缺少 projectid") ||
+          text.includes("缺少 project id") ||
+          text.includes("无法获取 projectid"))
+      );
+    };
+
+    try {
+      if (!token.projectId) {
+        const result = await this.fetchProjectId(token);
+        if (result?.projectId) {
+          token.projectId = result.projectId;
+        }
+        if (result?.tier) {
+          token.tier = result.tier;
+        }
+      }
+
+      await sendRequest();
       return { ok: true };
     } catch (error) {
       const status =
@@ -1113,13 +1187,38 @@ class GeminiCliTokenManager {
         errorBody = error.message || "未知错误";
       }
 
-      if (status === 403) {
-        const isContextLimit = String(errorBody).includes(
-          "The caller does not",
-        );
-        if (!isContextLimit) {
-          return { ok: false, status, message: errorBody };
+      const errorText = String(errorBody || "");
+
+      if (shouldRetryWithProjectId(status, errorText)) {
+        try {
+          log.info(
+            "[GeminiCLI] 启动检测遇到 projectId 缺失，尝试自动获取后重试",
+          );
+          const result = await this.fetchProjectId(token);
+          if (result?.projectId) {
+            token.projectId = result.projectId;
+          }
+          if (result?.tier) {
+            token.tier = result.tier;
+          }
+          if (token.projectId) {
+            await sendRequest();
+            return { ok: true };
+          }
+        } catch (retryError) {
+          log.warn(
+            `[GeminiCLI] 自动获取 projectId 后重试失败: ${retryError.message}`,
+          );
         }
+      }
+
+      const isContextLimit =
+        status === 403 && errorText.includes("The caller does not");
+      const shouldDisable =
+        (status === 400 || status === 401 || status === 403) && !isContextLimit;
+
+      if (shouldDisable) {
+        return { ok: false, status, message: errorText };
       }
 
       // 其他非致命状态码不阻止启用
@@ -1132,9 +1231,10 @@ class GeminiCliTokenManager {
    * @param {string} tokenId - 安全的 token ID
    * @returns {Promise<Object>} 操作结果
    */
-  async enableTokenById(tokenId) {
+  async enableTokenById(tokenId, options = {}) {
     try {
       const tokenData = await this.findTokenById(tokenId);
+      const errorStage = options.stage || "enable_test";
 
       // 辅助函数：将启用验证失败的错误信息写入凭证存储
       const saveEnableError = async (errorMessage) => {
@@ -1145,11 +1245,15 @@ class GeminiCliTokenManager {
             (token) => generateTokenId(token.refresh_token, salt) === tokenId,
           );
           if (index !== -1) {
+            const errorTime = Date.now();
             allTokens[index] = {
               ...allTokens[index],
+              enable: false,
+              disableReason: errorMessage,
+              disableTime: errorTime,
               lastError: errorMessage,
-              lastErrorTime: new Date().toISOString(),
-              lastErrorStage: "enable_test",
+              lastErrorTime: errorTime,
+              lastErrorStage: errorStage,
             };
             await this.store.writeAll(allTokens);
             await this.reload();
