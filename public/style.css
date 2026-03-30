@@ -730,6 +730,25 @@ html.tab-logs .content {
     }
 }
 
+.token-disable-reason {
+    padding: 0.35rem 0.6rem;
+    margin: 0 0.2rem 0.3rem;
+    background: rgba(220, 53, 69, 0.08);
+    border-radius: 6px;
+    font-size: 0.78rem;
+    color: var(--danger, #dc3545);
+    line-height: 1.4;
+    word-break: break-all;
+    border-left: 3px solid var(--danger, #dc3545);
+}
+
+@media (prefers-color-scheme: dark) {
+    .token-disable-reason {
+        background: rgba(220, 53, 69, 0.12);
+        color: #f08080;
+    }
+}
+
 .token-card.refresh-failed {
     border-color: var(--danger);
 }

@@ -270,7 +270,7 @@ async function handleApiError(error, token, dumpId = null) {
         errorBody,
       );
     }
-    tokenManager.disableCurrentToken(token);
+    tokenManager.disableCurrentToken(token, `API请求返回403: ${errorBody}`);
     throw createApiError(
       `该账号没有使用权限，已自动禁用。错误详情: ${errorBody}`,
       status,

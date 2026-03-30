@@ -920,6 +920,10 @@ function renderTokens(tokens) {
         const safeProjectIdJs = escapeJs(token.projectId || '');
         const safeEmailJs = escapeJs(token.email || '');
 
+        // 禁用原因相关
+        const disableReason = token.disableReason ? escapeHtml(token.disableReason) : '';
+        const disableTimeStr = token.disableTime ? new Date(token.disableTime).toLocaleString('zh-CN') : '';
+
         return `
         <div class="token-card ${!token.enable ? 'disabled' : ''} ${isRefreshing ? 'refreshing' : ''} ${skipAnimation ? 'no-animation' : ''}" id="card-${escapeHtml(cardId)}">
             <div class="token-header">
@@ -934,6 +938,7 @@ function renderTokens(tokens) {
                     <span class="token-id">#${tokenNumber}</span>
                 </div>
             </div>
+            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? '禁用时间: ' + disableTimeStr : ''}">⚠️ ${disableReason}${disableTimeStr ? ' (' + disableTimeStr + ')' : ''}</div>` : ''}
             <div class="token-info">
                 <div class="info-row editable sensitive-row" onclick="editField(event, '${safeTokenId}', 'projectId', '${safeProjectIdJs}')" title="点击编辑">
                     <span class="info-label">📦</span>
@@ -1150,6 +1155,8 @@ function showTokenDetail(tokenId) {
     const safeProjectId = escapeHtml(token.projectId || '');
     const safeEmail = escapeHtml(token.email || '');
     const updatedAtStr = escapeHtml(token.timestamp ? new Date(token.timestamp).toLocaleString('zh-CN') : '未知');
+    const disableReason = token.disableReason ? escapeHtml(token.disableReason) : '';
+    const disableTimeStr = token.disableTime ? new Date(token.disableTime).toLocaleString('zh-CN') : '';
 
     const modal = document.createElement('div');
     modal.className = 'modal form-modal';
@@ -1172,6 +1179,12 @@ function showTokenDetail(tokenId) {
                 <label>🕒 最后更新时间</label>
                 <input type="text" value="${updatedAtStr}" readonly style="background: var(--bg); cursor: not-allowed;">
             </div>
+            ${!token.enable && disableReason ? `
+            <div class="form-group compact">
+                <label>⚠️ 禁用原因</label>
+                <div class="token-disable-detail" style="padding: 0.5rem; background: var(--danger-bg, rgba(220,53,69,0.1)); border-radius: 6px; font-size: 0.85rem; color: var(--danger, #dc3545); word-break: break-all;">${disableReason}${disableTimeStr ? '<br><span style="color: var(--text-light); font-size: 0.8rem;">禁用时间: ' + disableTimeStr + '</span>' : ''}</div>
+            </div>
+            ` : ''}
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
                 <button class="btn btn-success" onclick="saveTokenDetail('${safeTokenId}')">💾 保存</button>

@@ -118,16 +118,18 @@ class GeminiCliTokenManager {
     let successCount = 0;
     let failCount = 0;
     const tokensToDisable = [];
+    const disableReasons = [];
     const failedTokenIds = [];
 
     results.forEach((result, index) => {
       const token = expiredTokens[index];
       const tokenId = tokenIds[index];
       if (result.status === 'fulfilled') {
-        if (result.value === 'success') {
+        if (result.value.action === 'success') {
           successCount++;
-        } else if (result.value === 'disable') {
+        } else if (result.value.action === 'disable') {
           tokensToDisable.push(token);
+          disableReasons.push(result.value.reason || 'Token刷新失败');
           failCount++;
           failedTokenIds.push(tokenId);
         }
@@ -138,8 +140,8 @@ class GeminiCliTokenManager {
     });
 
     // 批量禁用失效的 token
-    for (const token of tokensToDisable) {
-      this.disableToken(token);
+    for (let i = 0; i < tokensToDisable.length; i++) {
+      this.disableToken(tokensToDisable[i], disableReasons[i]);
     }
 
     const elapsed = Date.now() - startTime;
@@ -153,16 +155,16 @@ class GeminiCliTokenManager {
   /**
    * 安全刷新单个 token（不抛出异常）
    * @param {Object} token - Token 对象
-   * @returns {Promise<'success'|'disable'|'skip'>} 刷新结果
+   * @returns {Promise<{action: 'success'|'disable'|'skip', reason?: string}>} 刷新结果
    * @private
    */
   async _refreshTokenSafe(token) {
     try {
       await this.refreshToken(token, true);
-      return 'success';
+      return { action: 'success' };
     } catch (error) {
       if (error.statusCode === 403 || error.statusCode === 400) {
-        return 'disable';
+        return { action: 'disable', reason: `Token刷新失败(${error.statusCode}): ${error.message}` };
       }
       throw error;
     }
@@ -267,9 +269,11 @@ class GeminiCliTokenManager {
     });
   }
 
-  disableToken(token) {
-    log.warn(`[GeminiCLI] 禁用token ...${token.access_token.slice(-8)}`);
+  disableToken(token, reason = '未知原因') {
+    log.warn(`[GeminiCLI] 禁用token ...${token.access_token.slice(-8)}, 原因: ${reason}`);
     token.enable = false;
+    token.disableReason = reason;
+    token.disableTime = Date.now();
     this.saveToFile();
     this.tokenRequestCounts.delete(token.refresh_token);
     this.tokens = this.tokens.filter(t => t.refresh_token !== token.refresh_token);
@@ -444,7 +448,7 @@ class GeminiCliTokenManager {
   /**
    * 准备单个 token（刷新 + 获取 projectId）
    * @param {Object} token - Token 对象
-   * @returns {Promise<'ready'|'disable'>} 处理结果
+   * @returns {Promise<{action: 'ready'|'disable', reason?: string}>} 处理结果
    * @private
    */
   async _prepareToken(token) {
@@ -458,30 +462,30 @@ class GeminiCliTokenManager {
       const projectId = await this.fetchProjectId(token);
       if (!projectId) {
         log.warn(`[GeminiCLI] 无法获取 projectId，禁用账号`);
-        return 'disable';
+        return { action: 'disable', reason: '无法获取projectId，该账号可能不支持 Gemini CLI' };
       }
       token.projectId = projectId;
       this.saveToFile(token);
     }
 
-    return 'ready';
+    return { action: 'ready' };
   }
 
   /**
    * 处理 token 准备过程中的错误
    * @param {Error} error - 错误对象
    * @param {Object} token - Token 对象
-   * @returns {'disable'|'skip'} 处理结果
+   * @returns {{action: 'disable'|'skip', reason?: string}} 处理结果
    * @private
    */
   _handleTokenError(error, token) {
     const suffix = token.access_token?.slice(-8) || 'unknown';
     if (error.statusCode === 403 || error.statusCode === 400) {
       log.warn(`[GeminiCLI] ...${suffix}: Token 已失效或错误，已自动禁用该账号`);
-      return 'disable';
+      return { action: 'disable', reason: `Token准备失败(${error.statusCode}): ${error.message}` };
     }
     log.error(`[GeminiCLI] ...${suffix} 操作失败:`, error.message);
-    return 'skip';
+    return { action: 'skip' };
   }
 
   /**
@@ -501,8 +505,8 @@ class GeminiCliTokenManager {
 
       try {
         const result = await this._prepareToken(token);
-        if (result === 'disable') {
-          this.disableToken(token);
+        if (result.action === 'disable') {
+          this.disableToken(token, result.reason);
           if (this.tokens.length === 0) return null;
           continue;
         }
@@ -524,9 +528,9 @@ class GeminiCliTokenManager {
 
         return token;
       } catch (error) {
-        const action = this._handleTokenError(error, token);
-        if (action === 'disable') {
-          this.disableToken(token);
+        const errorResult = this._handleTokenError(error, token);
+        if (errorResult.action === 'disable') {
+          this.disableToken(token, errorResult.reason);
           if (this.tokens.length === 0) return null;
         }
         // skip: 继续尝试下一个 token
@@ -536,10 +540,10 @@ class GeminiCliTokenManager {
     return null;
   }
 
-  disableCurrentToken(token) {
+  disableCurrentToken(token, reason = 'API请求返回403，账号无使用权限') {
     const found = this.tokens.find(t => t.access_token === token.access_token);
     if (found) {
-      this.disableToken(found);
+      this.disableToken(found, reason);
     }
   }
 
@@ -590,6 +594,12 @@ class GeminiCliTokenManager {
         return { success: false, message: 'Token不存在' };
       }
 
+      // 重新启用时清除禁用原因
+      if (updates.enable === true) {
+        updates.disableReason = null;
+        updates.disableTime = null;
+      }
+
       allTokens[index] = { ...allTokens[index], ...updates };
       await this.store.writeAll(allTokens);
 
@@ -631,7 +641,9 @@ class GeminiCliTokenManager {
         timestamp: token.timestamp,
         enable: token.enable !== false,
         email: token.email || null,
-        projectId: token.projectId || null
+        projectId: token.projectId || null,
+        disableReason: token.disableReason || null,
+        disableTime: token.disableTime || null
       }));
     } catch (error) {
       log.error('[GeminiCLI] 获取Token列表失败:', error.message);
@@ -719,6 +731,12 @@ class GeminiCliTokenManager {
 
       if (index === -1) {
         return { success: false, message: 'Token不存在' };
+      }
+
+      // 重新启用时清除禁用原因
+      if (updates.enable === true) {
+        updates.disableReason = null;
+        updates.disableTime = null;
       }
 
       allTokens[index] = { ...allTokens[index], ...updates };

@@ -126,7 +126,7 @@ async function handleApiError(error, token) {
         errorBody,
       );
     }
-    geminicliTokenManager.disableCurrentToken(token);
+    geminicliTokenManager.disableCurrentToken(token, `API请求返回403: ${errorBody}`);
     throw createApiError(
       `该账号没有使用权限，已自动禁用。错误详情: ${errorBody}`,
       status,
@@ -308,9 +308,10 @@ export async function getToken() {
 /**
  * 禁用当前 Token
  * @param {Object} token - Token 对象
+ * @param {string} [reason] - 禁用原因
  */
-export function disableCurrentToken(token) {
-  geminicliTokenManager.disableCurrentToken(token);
+export function disableCurrentToken(token, reason) {
+  geminicliTokenManager.disableCurrentToken(token, reason);
 }
 
 /**
