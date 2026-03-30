@@ -1,24 +1,30 @@
-import axios from 'axios';
-import { log } from '../utils/logger.js';
-import { generateSessionId, generateProjectId, generateTokenId, generateInstanceId, generateRequestId } from '../utils/idGenerator.js';
-import config, { getConfigJson } from '../config/config.js';
-import { OAUTH_CONFIG } from '../constants/oauth.js';
-import { buildAxiosRequestConfig, httpRequest } from '../utils/httpClient.js';
+import axios from "axios";
+import { randomUUID } from "crypto";
+import config, { getConfigJson } from "../config/config.js";
 import {
   DEFAULT_REQUEST_COUNT_PER_TOKEN,
-  TOKEN_REFRESH_BUFFER
-} from '../constants/index.js';
-import TokenStore from './token_store.js';
-import { TokenError } from '../utils/errors.js';
-import quotaManager from './quota_manager.js';
-import tokenCooldownManager from './token_cooldown_manager.js';
-import { randomUUID } from 'crypto';
+  TOKEN_REFRESH_BUFFER,
+} from "../constants/index.js";
+import { OAUTH_CONFIG } from "../constants/oauth.js";
+import { TokenError } from "../utils/errors.js";
+import { buildAxiosRequestConfig, httpRequest } from "../utils/httpClient.js";
+import {
+  generateInstanceId,
+  generateProjectId,
+  generateRequestId,
+  generateSessionId,
+  generateTokenId,
+} from "../utils/idGenerator.js";
+import { log } from "../utils/logger.js";
+import quotaManager from "./quota_manager.js";
+import tokenCooldownManager from "./token_cooldown_manager.js";
+import TokenStore from "./token_store.js";
 
 // 轮询策略枚举
 const RotationStrategy = {
-  ROUND_ROBIN: 'round_robin',           // 均衡负载：每次请求切换
-  QUOTA_EXHAUSTED: 'quota_exhausted',   // 额度耗尽才切换
-  REQUEST_COUNT: 'request_count'        // 自定义次数后切换
+  ROUND_ROBIN: "round_robin", // 均衡负载：每次请求切换
+  QUOTA_EXHAUSTED: "quota_exhausted", // 额度耗尽才切换
+  REQUEST_COUNT: "request_count", // 自定义次数后切换
 };
 
 /**
@@ -56,16 +62,18 @@ class TokenManager {
 
   async _initialize() {
     try {
-      log.info('正在初始化token管理器...');
+      log.info("正在初始化token管理器...");
       const tokenArray = await this.store.readAll();
 
-      this.tokens = tokenArray.filter(token => token.enable !== false).map(token => ({
-        ...token,
-        sessionId: generateSessionId(),
-        instanceId: generateInstanceId(),
-        deviceId: randomUUID(),
-        sub: token?.sub ? token?.sub : "g1-pro-tier"
-      }));
+      this.tokens = tokenArray
+        .filter((token) => token.enable !== false)
+        .map((token) => ({
+          ...token,
+          sessionId: generateSessionId(),
+          instanceId: generateInstanceId(),
+          deviceId: randomUUID(),
+          sub: token?.sub ? token?.sub : "g1-pro-tier",
+        }));
 
       this.currentIndex = 0;
       this.tokenRequestCounts.clear();
@@ -75,13 +83,15 @@ class TokenManager {
       this.loadRotationConfig();
 
       if (this.tokens.length === 0) {
-        log.warn('⚠ 暂无可用账号，请使用以下方式添加：');
-        log.warn('  方式1: 运行 npm run login 命令登录');
-        log.warn('  方式2: 访问前端管理页面添加账号');
+        log.warn("⚠ 暂无可用账号，请使用以下方式添加：");
+        log.warn("  方式1: 运行 npm run login 命令登录");
+        log.warn("  方式2: 访问前端管理页面添加账号");
       } else {
         log.info(`成功加载 ${this.tokens.length} 个可用token`);
         if (this.rotationStrategy === RotationStrategy.REQUEST_COUNT) {
-          log.info(`轮询策略: ${this.rotationStrategy}, 每token请求 ${this.requestCountPerToken} 次后切换`);
+          log.info(
+            `轮询策略: ${this.rotationStrategy}, 每token请求 ${this.requestCountPerToken} 次后切换`,
+          );
         } else {
           log.info(`轮询策略: ${this.rotationStrategy}`);
         }
@@ -90,7 +100,7 @@ class TokenManager {
         await this._refreshExpiredTokensConcurrently();
       }
     } catch (error) {
-      log.error('初始化token失败:', error.message);
+      log.error("初始化token失败:", error.message);
       this.tokens = [];
     }
   }
@@ -100,20 +110,22 @@ class TokenManager {
    * @private
    */
   async _refreshExpiredTokensConcurrently() {
-    const expiredTokens = this.tokens.filter(token => this.isExpired(token));
+    const expiredTokens = this.tokens.filter((token) => this.isExpired(token));
     if (expiredTokens.length === 0) {
       return;
     }
 
     // 获取 salt 用于生成 tokenId
     const salt = await this.store.getSalt();
-    const tokenIds = expiredTokens.map(token => generateTokenId(token.refresh_token, salt));
+    const tokenIds = expiredTokens.map((token) =>
+      generateTokenId(token.refresh_token, salt),
+    );
 
-    log.info(`正在批量刷新 ${tokenIds.length} 个token: ${tokenIds.join(', ')}`);
+    log.info(`正在批量刷新 ${tokenIds.length} 个token: ${tokenIds.join(", ")}`);
     const startTime = Date.now();
 
     const results = await Promise.allSettled(
-      expiredTokens.map(token => this._refreshTokenSafe(token))
+      expiredTokens.map((token) => this._refreshTokenSafe(token)),
     );
 
     let successCount = 0;
@@ -125,12 +137,15 @@ class TokenManager {
     results.forEach((result, index) => {
       const token = expiredTokens[index];
       const tokenId = tokenIds[index];
-      if (result.status === 'fulfilled') {
-        if (result.value.action === 'success') {
+      if (result.status === "fulfilled") {
+        if (result.value.action === "success") {
           successCount++;
-        } else if (result.value.action === 'disable') {
+        } else if (result.value.action === "disable") {
           tokensToDisable.push(token);
-          disableReasons.push(result.value.reason || 'Token刷新失败');
+          disableReasons.push(result.value.reason || "Token刷新失败");
+          failCount++;
+          failedTokenIds.push(tokenId);
+        } else if (result.value.action === "skip") {
           failCount++;
           failedTokenIds.push(tokenId);
         }
@@ -147,7 +162,9 @@ class TokenManager {
 
     const elapsed = Date.now() - startTime;
     if (failCount > 0) {
-      log.warn(`刷新完成: 成功 ${successCount}, 失败 ${failCount} (${failedTokenIds.join(', ')}), 耗时 ${elapsed}ms`);
+      log.warn(
+        `刷新完成: 成功 ${successCount}, 失败 ${failCount} (${failedTokenIds.join(", ")}), 耗时 ${elapsed}ms`,
+      );
     } else {
       log.info(`刷新完成: 成功 ${successCount}, 耗时 ${elapsed}ms`);
     }
@@ -163,12 +180,37 @@ class TokenManager {
     try {
       // 并发刷新时使用静默模式，避免重复打印日志
       await this.refreshToken(token, true);
-      return { action: 'success' };
+      this._clearTokenError(token);
+      return { action: "success" };
     } catch (error) {
-      if (error.statusCode === 403 || error.statusCode === 400) {
-        return { action: 'disable', reason: `Token刷新失败(${error.statusCode}): ${error.message}` };
+      const statusCode =
+        error.statusCode || error.response?.status || error.status || 500;
+      const rawMessage = error.message || "未知错误";
+      const reason = `启动检测刷新失败(${statusCode}): ${rawMessage}`;
+      this._recordTokenError(token, reason, "startup_refresh");
+      if (statusCode === 403 || statusCode === 400) {
+        return { action: "disable", reason };
       }
-      throw error;
+      return { action: "skip", reason };
+    }
+  }
+
+  _recordTokenError(token, message, stage = "startup_refresh") {
+    if (!token) return;
+    const trimmed = String(message || "未知错误").slice(0, 800);
+    token.lastError = trimmed;
+    token.lastErrorTime = Date.now();
+    token.lastErrorStage = stage;
+    this.saveToFile(token);
+  }
+
+  _clearTokenError(token) {
+    if (!token) return;
+    if (token.lastError || token.lastErrorTime || token.lastErrorStage) {
+      token.lastError = null;
+      token.lastErrorTime = null;
+      token.lastErrorStage = null;
+      this.saveToFile(token);
     }
   }
 
@@ -184,11 +226,12 @@ class TokenManager {
     try {
       const jsonConfig = getConfigJson();
       if (jsonConfig.rotation) {
-        this.rotationStrategy = jsonConfig.rotation.strategy || RotationStrategy.ROUND_ROBIN;
+        this.rotationStrategy =
+          jsonConfig.rotation.strategy || RotationStrategy.ROUND_ROBIN;
         this.requestCountPerToken = jsonConfig.rotation.requestCount || 10;
       }
     } catch (error) {
-      log.warn('加载轮询配置失败，使用默认值:', error.message);
+      log.warn("加载轮询配置失败，使用默认值:", error.message);
     }
   }
 
@@ -203,7 +246,9 @@ class TokenManager {
     // 重置计数器
     this.tokenRequestCounts.clear();
     if (this.rotationStrategy === RotationStrategy.REQUEST_COUNT) {
-      log.info(`轮询策略已更新: ${this.rotationStrategy}, 每token请求 ${this.requestCountPerToken} 次后切换`);
+      log.info(
+        `轮询策略已更新: ${this.rotationStrategy}, 每token请求 ${this.requestCountPerToken} 次后切换`,
+      );
     } else {
       log.info(`轮询策略已更新: ${this.rotationStrategy}`);
     }
@@ -221,7 +266,8 @@ class TokenManager {
     if (this.availableQuotaTokenIndices.length === 0) {
       this.currentQuotaIndex = 0;
     } else {
-      this.currentQuotaIndex = this.currentQuotaIndex % this.availableQuotaTokenIndices.length;
+      this.currentQuotaIndex =
+        this.currentQuotaIndex % this.availableQuotaTokenIndices.length;
     }
   }
 
@@ -239,23 +285,28 @@ class TokenManager {
   async fetchProjectId(token) {
     // 步骤1: 尝试 loadCodeAssist
     try {
-
-      const {projectId,sub} = await this._tryLoadCodeAssist(token) || {};
-      if (projectId) return {projectId,sub};
-      log.warn('[fetchProjectId] loadCodeAssist 未返回 projectId，回退到 onboardUser');
+      const { projectId, sub } = (await this._tryLoadCodeAssist(token)) || {};
+      if (projectId) return { projectId, sub };
+      log.warn(
+        "[fetchProjectId] loadCodeAssist 未返回 projectId，回退到 onboardUser",
+      );
     } catch (err) {
-      log.warn(`[fetchProjectId] loadCodeAssist 失败: ${err.message}，回退到 onboardUser`);
+      log.warn(
+        `[fetchProjectId] loadCodeAssist 失败: ${err.message}，回退到 onboardUser`,
+      );
     }
 
     // 步骤2: 回退到 onboardUser
     try {
-      const {projectId,sub} = await this._tryOnboardUser(token) || {};
-      if (projectId) return {projectId, sub};
-      log.error('[fetchProjectId] loadCodeAssist 和 onboardUser 均未能获取 projectId');
-      return {projectId: undefined, sub: "free-tier"};
+      const { projectId, sub } = (await this._tryOnboardUser(token)) || {};
+      if (projectId) return { projectId, sub };
+      log.error(
+        "[fetchProjectId] loadCodeAssist 和 onboardUser 均未能获取 projectId",
+      );
+      return { projectId: undefined, sub: "free-tier" };
     } catch (err) {
       log.error(`[fetchProjectId] onboardUser 失败: ${err.message}`);
-      return {projectId: undefined, sub: "free-tier"};
+      return { projectId: undefined, sub: "free-tier" };
     }
   }
 
@@ -270,25 +321,27 @@ class TokenManager {
     const requestUrl = `https://${apiHost}/v1internal:loadCodeAssist`;
     const requestBody = {
       metadata: {
-        ideType: 'ANTIGRAVITY',
-        platform: 'PLATFORM_UNSPECIFIED',
-        pluginType: 'GEMINI'
-      }
+        ideType: "ANTIGRAVITY",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+      },
     };
 
     log.info(`[loadCodeAssist] 请求: ${requestUrl}`);
-    const response = await axios(buildAxiosRequestConfig({
-      method: 'POST',
-      url: requestUrl,
-      headers: {
-        'Host': apiHost,
-        'User-Agent': config.api.userAgent,
-        'Authorization': `Bearer ${token.access_token}`,
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'gzip'
-      },
-      data: JSON.stringify(requestBody)
-    }));
+    const response = await axios(
+      buildAxiosRequestConfig({
+        method: "POST",
+        url: requestUrl,
+        headers: {
+          Host: apiHost,
+          "User-Agent": config.api.userAgent,
+          Authorization: `Bearer ${token.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Encoding": "gzip",
+        },
+        data: JSON.stringify(requestBody),
+      }),
+    );
 
     const data = response.data;
     // log.info(`[loadCodeAssist] 响应: ${JSON.stringify(data)}`); // 响应可能很大，不打印
@@ -296,18 +349,18 @@ class TokenManager {
     // 检查是否有 currentTier（表示用户已激活）
     let sub = "free-tier";
     if (data?.currentTier) {
-      log.info('[loadCodeAssist] 用户已激活');
+      log.info("[loadCodeAssist] 用户已激活");
       const projectId = data.cloudaicompanionProject;
       if (projectId) {
         log.info(`[loadCodeAssist] 成功获取 projectId: ${projectId}`);
         sub = data.currentTier.id;
-        return {projectId, sub};
+        return { projectId, sub };
       }
-      log.warn('[loadCodeAssist] 响应中无 projectId');
+      log.warn("[loadCodeAssist] 响应中无 projectId");
       return null;
     }
 
-    log.info('[loadCodeAssist] 用户未激活 (无 currentTier)');
+    log.info("[loadCodeAssist] 用户未激活 (无 currentTier)");
     return null;
   }
 
@@ -324,7 +377,7 @@ class TokenManager {
     // 首先获取用户的 tier 信息
     const tierId = await this._getOnboardTier(token);
     if (!tierId) {
-      log.error('[onboardUser] 无法确定用户 tier');
+      log.error("[onboardUser] 无法确定用户 tier");
       return null;
     }
 
@@ -333,10 +386,10 @@ class TokenManager {
     const requestBody = {
       tierId: tierId,
       metadata: {
-        ideType: 'ANTIGRAVITY',
-        platform: 'PLATFORM_UNSPECIFIED',
-        pluginType: 'GEMINI'
-      }
+        ideType: "ANTIGRAVITY",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+      },
     };
 
     log.info(`[onboardUser] 请求: ${requestUrl}`);
@@ -346,19 +399,21 @@ class TokenManager {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       log.info(`[onboardUser] 轮询尝试 ${attempt}/${maxAttempts}`);
 
-      const response = await axios(buildAxiosRequestConfig({
-        method: 'POST',
-        url: requestUrl,
-        headers: {
-          'Host': apiHost,
-          'User-Agent': config.api.userAgent,
-          'Authorization': `Bearer ${token.access_token}`,
-          'Content-Type': 'application/json',
-          'Accept-Encoding': 'gzip'
-        },
-        data: JSON.stringify(requestBody),
-        timeout: 30000
-      }));
+      const response = await axios(
+        buildAxiosRequestConfig({
+          method: "POST",
+          url: requestUrl,
+          headers: {
+            Host: apiHost,
+            "User-Agent": config.api.userAgent,
+            Authorization: `Bearer ${token.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Encoding": "gzip",
+          },
+          data: JSON.stringify(requestBody),
+          timeout: 30000,
+        }),
+      );
 
       const data = response.data;
       // log.info(`[onboardUser] 响应: ${JSON.stringify(data)}`); // 响应可能很大，不打印
@@ -366,30 +421,30 @@ class TokenManager {
       // 检查长时间运行操作是否完成
       let sub = "g1-pro-tier";
       if (data?.done) {
-        log.info('[onboardUser] 操作完成');
+        log.info("[onboardUser] 操作完成");
         const responseData = data.response || {};
         const projectObj = responseData.cloudaicompanionProject;
 
         let projectId = null;
-        if (typeof projectObj === 'object' && projectObj !== null) {
+        if (typeof projectObj === "object" && projectObj !== null) {
           projectId = projectObj.id;
-        } else if (typeof projectObj === 'string') {
+        } else if (typeof projectObj === "string") {
           projectId = projectObj;
         }
 
         if (projectId) {
           log.info(`[onboardUser] 成功获取 projectId: ${projectId}`);
-          return {projectId,sub};
+          return { projectId, sub };
         }
-        log.warn('[onboardUser] 操作完成但响应中无 projectId');
+        log.warn("[onboardUser] 操作完成但响应中无 projectId");
         return null;
       }
 
-      log.info('[onboardUser] 操作进行中，等待 2 秒...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      log.info("[onboardUser] 操作进行中，等待 2 秒...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    log.error('[onboardUser] 超时：操作未在 10 秒内完成');
+    log.error("[onboardUser] 超时：操作未在 10 秒内完成");
     return null;
   }
 
@@ -404,28 +459,30 @@ class TokenManager {
     const requestUrl = `https://${apiHost}/v1internal:loadCodeAssist`;
     const requestBody = {
       metadata: {
-        ideType: 'ANTIGRAVITY',
-        platform: 'PLATFORM_UNSPECIFIED',
-        pluginType: 'GEMINI'
-      }
+        ideType: "ANTIGRAVITY",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+      },
     };
 
     log.info(`[_getOnboardTier] 请求: ${requestUrl}`);
 
     try {
-      const response = await axios(buildAxiosRequestConfig({
-        method: 'POST',
-        url: requestUrl,
-        headers: {
-          'Host': apiHost,
-          'User-Agent': config.api.userAgent,
-          'Authorization': `Bearer ${token.access_token}`,
-          'Content-Type': 'application/json',
-          'Accept-Encoding': 'gzip'
-        },
-        data: JSON.stringify(requestBody),
-        timeout: 30000
-      }));
+      const response = await axios(
+        buildAxiosRequestConfig({
+          method: "POST",
+          url: requestUrl,
+          headers: {
+            Host: apiHost,
+            "User-Agent": config.api.userAgent,
+            Authorization: `Bearer ${token.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Encoding": "gzip",
+          },
+          data: JSON.stringify(requestBody),
+          timeout: 30000,
+        }),
+      );
 
       const data = response.data;
       // log.info(`[_getOnboardTier] 响应: ${JSON.stringify(data)}`); // 响应可能很大，不打印
@@ -440,8 +497,8 @@ class TokenManager {
       }
 
       // 如果没有默认 tier，使用 LEGACY 作为回退
-      log.warn('[_getOnboardTier] 未找到默认 tier，使用 LEGACY');
-      return 'LEGACY';
+      log.warn("[_getOnboardTier] 未找到默认 tier，使用 LEGACY");
+      return "LEGACY";
     } catch (err) {
       log.error(`[_getOnboardTier] 获取 tier 失败: ${err.message}`);
       return null;
@@ -456,7 +513,7 @@ class TokenManager {
   async fetchProjectIdForToken(tokenId) {
     const tokenData = await this.findTokenById(tokenId);
     if (!tokenData) {
-      throw new TokenError('Token不存在', null, 404);
+      throw new TokenError("Token不存在", null, 404);
     }
 
     // 确保 token 未过期
@@ -464,9 +521,9 @@ class TokenManager {
       await this.refreshToken(tokenData);
     }
 
-    const {projectId,sub} = await this.fetchProjectId(tokenData) || {};
+    const { projectId, sub } = (await this.fetchProjectId(tokenData)) || {};
     if (!projectId) {
-      throw new TokenError('无法获取 projectId，该账号可能无资格', null, 400);
+      throw new TokenError("无法获取 projectId，该账号可能无资格", null, 400);
     }
 
     // 更新并保存
@@ -476,7 +533,9 @@ class TokenManager {
     this.saveToFile(tokenData);
 
     // 同步更新内存中的 token
-    const memoryToken = this.tokens.find(t => t.refresh_token === tokenData.refresh_token);
+    const memoryToken = this.tokens.find(
+      (t) => t.refresh_token === tokenData.refresh_token,
+    );
     if (memoryToken) {
       memoryToken.projectId = projectId;
       memoryToken.sub = sub;
@@ -493,7 +552,7 @@ class TokenManager {
    */
   isExpired(token) {
     if (!token.timestamp || !token.expires_in) return true;
-    const expiresAt = token.timestamp + (token.expires_in * 1000);
+    const expiresAt = token.timestamp + token.expires_in * 1000;
     return Date.now() >= expiresAt - TOKEN_REFRESH_BUFFER;
   }
 
@@ -508,22 +567,24 @@ class TokenManager {
     const body = new URLSearchParams({
       client_id: OAUTH_CONFIG.CLIENT_ID,
       client_secret: OAUTH_CONFIG.CLIENT_SECRET,
-      grant_type: 'refresh_token',
-      refresh_token: token.refresh_token
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
     });
 
     try {
-      const response = await axios(buildAxiosRequestConfig({
-        method: 'POST',
-        url: OAUTH_CONFIG.TOKEN_URL,
-        headers: {
-          'Host': 'oauth2.googleapis.com',
-          'User-Agent': 'Go-http-client/1.1',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept-Encoding': 'gzip'
-        },
-        data: body.toString()
-      }));
+      const response = await axios(
+        buildAxiosRequestConfig({
+          method: "POST",
+          url: OAUTH_CONFIG.TOKEN_URL,
+          headers: {
+            Host: "oauth2.googleapis.com",
+            "User-Agent": "Go-http-client/1.1",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip",
+          },
+          data: body.toString(),
+        }),
+      );
 
       token.access_token = response.data.access_token;
       token.expires_in = response.data.expires_in;
@@ -531,9 +592,15 @@ class TokenManager {
       this.saveToFile(token);
       return token;
     } catch (error) {
-      const statusCode = error.response?.status;
+      const statusCode =
+        error.response?.status || error.status || error.statusCode || 500;
       const rawBody = error.response?.data;
-      const message = typeof rawBody === 'string' ? rawBody : (rawBody?.error?.message || error.message || '刷新 token 失败');
+      const message =
+        typeof rawBody === "string"
+          ? rawBody
+          : rawBody?.error?.message || error.message || "刷新 token 失败";
+      const reason = `启动检测刷新失败(${statusCode}): ${message}`;
+      this._recordTokenError(token, reason, "startup_refresh");
       throw new TokenError(message, tokenId, statusCode || 500);
     }
   }
@@ -541,19 +608,24 @@ class TokenManager {
   saveToFile(tokenToUpdate = null) {
     // 保持与旧接口同步调用方式一致，内部使用异步写入
     this.store.mergeActiveTokens(this.tokens, tokenToUpdate).catch((error) => {
-      log.error('保存账号配置文件失败:', error.message);
+      log.error("保存账号配置文件失败:", error.message);
     });
   }
 
-  disableToken(token, reason = '未知原因') {
+  disableToken(token, reason = "未知原因") {
     log.warn(`禁用token ...${token.access_token.slice(-8)}, 原因: ${reason}`);
     token.enable = false;
     token.disableReason = reason;
     token.disableTime = Date.now();
+    token.lastError = reason;
+    token.lastErrorTime = token.disableTime;
+    token.lastErrorStage = "disable";
     this.saveToFile();
     // 清理该 token 的请求计数（避免内存泄漏）
     this.tokenRequestCounts.delete(token.refresh_token);
-    this.tokens = this.tokens.filter(t => t.refresh_token !== token.refresh_token);
+    this.tokens = this.tokens.filter(
+      (t) => t.refresh_token !== token.refresh_token,
+    );
     this.currentIndex = this.currentIndex % Math.max(this.tokens.length, 1);
     // tokens 结构发生变化时，重建额度耗尽策略下的可用列表
     this._rebuildAvailableQuotaTokens();
@@ -572,7 +644,6 @@ class TokenManager {
     this.tokenRequestCounts.set(tokenKey, 0);
   }
 
-
   // 标记token额度耗尽
   markQuotaExhausted(token) {
     token.hasQuota = false;
@@ -580,11 +651,14 @@ class TokenManager {
     log.warn(`...${token.access_token.slice(-8)}: 额度已耗尽，标记为无额度`);
 
     if (this.rotationStrategy === RotationStrategy.QUOTA_EXHAUSTED) {
-      const tokenIndex = this.tokens.findIndex(t => t.refresh_token === token.refresh_token);
+      const tokenIndex = this.tokens.findIndex(
+        (t) => t.refresh_token === token.refresh_token,
+      );
       if (tokenIndex !== -1) {
         this._removeQuotaIndex(tokenIndex);
       }
-      this.currentIndex = (this.currentIndex + 1) % Math.max(this.tokens.length, 1);
+      this.currentIndex =
+        (this.currentIndex + 1) % Math.max(this.tokens.length, 1);
     }
   }
 
@@ -609,7 +683,7 @@ class TokenManager {
       quotaManager.recordRequest(tokenId, modelId);
     } catch (error) {
       // 记录失败不影响请求
-      log.warn('记录请求次数失败:', error.message);
+      log.warn("记录请求次数失败:", error.message);
     }
   }
 
@@ -630,12 +704,19 @@ class TokenManager {
       if (config.skipProjectIdFetch) {
         token.projectId = generateProjectId();
         this.saveToFile(token);
-        log.info(`...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`);
+        log.info(
+          `...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`,
+        );
       } else {
-        const {projectId,sub} = await this.fetchProjectId(token) || {};
+        const { projectId, sub } = (await this.fetchProjectId(token)) || {};
         if (projectId === undefined) {
-          log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`);
-          return { action: 'disable', reason: '无资格获取projectId，该账号可能不支持 Code Assist' };
+          log.warn(
+            `...${token.access_token.slice(-8)}: 无资格获取projectId，禁用账号`,
+          );
+          return {
+            action: "disable",
+            reason: "无资格获取projectId，该账号可能不支持 Code Assist",
+          };
         }
         token.projectId = projectId;
         token.sub = sub;
@@ -643,7 +724,7 @@ class TokenManager {
       }
     }
 
-    return { action: 'ready' };
+    return { action: "ready" };
   }
 
   /**
@@ -654,13 +735,16 @@ class TokenManager {
    * @private
    */
   _handleTokenError(error, token) {
-    const suffix = token.access_token?.slice(-8) || 'unknown';
+    const suffix = token.access_token?.slice(-8) || "unknown";
     if (error.statusCode === 403 || error.statusCode === 400) {
       log.warn(`...${suffix}: Token 已失效或错误，已自动禁用该账号`);
-      return { action: 'disable', reason: `Token准备失败(${error.statusCode}): ${error.message}` };
+      return {
+        action: "disable",
+        reason: `Token准备失败(${error.statusCode}): ${error.message}`,
+      };
     }
     log.error(`...${suffix} 操作失败:`, error.message);
-    return { action: 'skip' };
+    return { action: "skip" };
   }
 
   /**
@@ -668,8 +752,8 @@ class TokenManager {
    * @private
    */
   _resetAllQuotas() {
-    log.warn('所有token额度已耗尽，重置额度状态');
-    this.tokens.forEach(t => {
+    log.warn("所有token额度已耗尽，重置额度状态");
+    this.tokens.forEach((t) => {
       t.hasQuota = true;
     });
     this.saveToFile();
@@ -811,10 +895,13 @@ class TokenManager {
 
       try {
         const result = await this._prepareToken(token);
-        if (result.action === 'disable') {
+        if (result.action === "disable") {
           this.disableToken(token, result.reason);
           this._rebuildAvailableQuotaTokens();
-          if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
+          if (
+            this.tokens.length === 0 ||
+            this.availableQuotaTokenIndices.length === 0
+          ) {
             return null;
           }
           continue;
@@ -825,10 +912,13 @@ class TokenManager {
         return token;
       } catch (error) {
         const errorResult = this._handleTokenError(error, token);
-        if (errorResult.action === 'disable') {
+        if (errorResult.action === "disable") {
           this.disableToken(token, errorResult.reason);
           this._rebuildAvailableQuotaTokens();
-          if (this.tokens.length === 0 || this.availableQuotaTokenIndices.length === 0) {
+          if (
+            this.tokens.length === 0 ||
+            this.availableQuotaTokenIndices.length === 0
+          ) {
             return null;
           }
         }
@@ -870,7 +960,7 @@ class TokenManager {
 
       try {
         const result = await this._prepareToken(token);
-        if (result.action === 'disable') {
+        if (result.action === "disable") {
           this.disableToken(token, result.reason);
           if (this.tokens.length === 0) return null;
           continue;
@@ -895,7 +985,7 @@ class TokenManager {
         return token;
       } catch (error) {
         const errorResult = this._handleTokenError(error, token);
-        if (errorResult.action === 'disable') {
+        if (errorResult.action === "disable") {
           this.disableToken(token, errorResult.reason);
           if (this.tokens.length === 0) return null;
         }
@@ -906,8 +996,10 @@ class TokenManager {
     return null;
   }
 
-  disableCurrentToken(token, reason = 'API请求返回403，账号无使用权限') {
-    const found = this.tokens.find(t => t.access_token === token.access_token);
+  disableCurrentToken(token, reason = "API请求返回403，账号无使用权限") {
+    const found = this.tokens.find(
+      (t) => t.access_token === token.access_token,
+    );
     if (found) {
       this.disableToken(found, reason);
     }
@@ -917,7 +1009,7 @@ class TokenManager {
   async reload() {
     this._initPromise = this._initialize();
     await this._initPromise;
-    log.info('Token已热重载');
+    log.info("Token已热重载");
   }
 
   async addToken(tokenData) {
@@ -929,7 +1021,7 @@ class TokenManager {
         refresh_token: tokenData.refresh_token,
         expires_in: tokenData.expires_in || 3599,
         timestamp: tokenData.timestamp || Date.now(),
-        enable: tokenData.enable !== undefined ? tokenData.enable : true
+        enable: tokenData.enable !== undefined ? tokenData.enable : true,
       };
 
       if (tokenData.projectId) {
@@ -949,9 +1041,9 @@ class TokenManager {
       await this.store.writeAll(allTokens);
 
       await this.reload();
-      return { success: true, message: 'Token添加成功' };
+      return { success: true, message: "Token添加成功" };
     } catch (error) {
-      log.error('添加Token失败:', error.message);
+      log.error("添加Token失败:", error.message);
       return { success: false, message: error.message };
     }
   }
@@ -960,9 +1052,11 @@ class TokenManager {
     try {
       const allTokens = await this.store.readAll();
 
-      const index = allTokens.findIndex(t => t.refresh_token === refreshToken);
+      const index = allTokens.findIndex(
+        (t) => t.refresh_token === refreshToken,
+      );
       if (index === -1) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
       // 重新启用时清除禁用原因
@@ -974,9 +1068,9 @@ class TokenManager {
       await this.store.writeAll(allTokens);
 
       await this.reload();
-      return { success: true, message: 'Token更新成功' };
+      return { success: true, message: "Token更新成功" };
     } catch (error) {
-      log.error('更新Token失败:', error.message);
+      log.error("更新Token失败:", error.message);
       return { success: false, message: error.message };
     }
   }
@@ -985,17 +1079,19 @@ class TokenManager {
     try {
       const allTokens = await this.store.readAll();
 
-      const filteredTokens = allTokens.filter(t => t.refresh_token !== refreshToken);
+      const filteredTokens = allTokens.filter(
+        (t) => t.refresh_token !== refreshToken,
+      );
       if (filteredTokens.length === allTokens.length) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
       await this.store.writeAll(filteredTokens);
 
       await this.reload();
-      return { success: true, message: 'Token删除成功' };
+      return { success: true, message: "Token删除成功" };
     } catch (error) {
-      log.error('删除Token失败:', error.message);
+      log.error("删除Token失败:", error.message);
       return { success: false, message: error.message };
     }
   }
@@ -1005,7 +1101,7 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const salt = await this.store.getSalt();
 
-      return allTokens.map(token => ({
+      return allTokens.map((token) => ({
         // 使用安全的 tokenId 替代完整的 refresh_token
         id: generateTokenId(token.refresh_token, salt),
         expires_in: token.expires_in,
@@ -1015,10 +1111,13 @@ class TokenManager {
         email: token.email || null,
         hasQuota: token.hasQuota !== false,
         disableReason: token.disableReason || null,
-        disableTime: token.disableTime || null
+        disableTime: token.disableTime || null,
+        lastError: token.lastError || null,
+        lastErrorTime: token.lastErrorTime || null,
+        lastErrorStage: token.lastErrorStage || null,
       }));
     } catch (error) {
-      log.error('获取Token列表失败:', error.message);
+      log.error("获取Token列表失败:", error.message);
       return [];
     }
   }
@@ -1033,11 +1132,13 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const salt = await this.store.getSalt();
 
-      return allTokens.find(token =>
-        generateTokenId(token.refresh_token, salt) === tokenId
-      ) || null;
+      return (
+        allTokens.find(
+          (token) => generateTokenId(token.refresh_token, salt) === tokenId,
+        ) || null
+      );
     } catch (error) {
-      log.error('查找Token失败:', error.message);
+      log.error("查找Token失败:", error.message);
       return null;
     }
   }
@@ -1053,27 +1154,30 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const salt = await this.store.getSalt();
 
-      const index = allTokens.findIndex(token =>
-        generateTokenId(token.refresh_token, salt) === tokenId
+      const index = allTokens.findIndex(
+        (token) => generateTokenId(token.refresh_token, salt) === tokenId,
       );
 
       if (index === -1) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
       // 重新启用时清除禁用原因
       if (updates.enable === true) {
         updates.disableReason = null;
         updates.disableTime = null;
+        updates.lastError = null;
+        updates.lastErrorTime = null;
+        updates.lastErrorStage = null;
       }
 
       allTokens[index] = { ...allTokens[index], ...updates };
       await this.store.writeAll(allTokens);
 
       await this.reload();
-      return { success: true, message: 'Token更新成功' };
+      return { success: true, message: "Token更新成功" };
     } catch (error) {
-      log.error('更新Token失败:', error.message);
+      log.error("更新Token失败:", error.message);
       return { success: false, message: error.message };
     }
   }
@@ -1093,48 +1197,54 @@ class TokenManager {
       project: token.projectId,
       requestId: generateRequestId(),
       request: {
-        contents: [
-          { role: 'user', parts: [{ text: 'hi' }] }
-        ],
+        contents: [{ role: "user", parts: [{ text: "hi" }] }],
         generationConfig: {
           maxOutputTokens: 1,
-          candidateCount: 1
+          candidateCount: 1,
         },
-        sessionId: generateSessionId()
+        sessionId: generateSessionId(),
       },
-      model: 'gemini-2.5-flash',
-      userAgent: 'antigravity',
-      requestType: 'agent'
+      model: "gemini-2.5-flash",
+      userAgent: "antigravity",
+      requestType: "agent",
     };
 
     try {
       await httpRequest({
-        method: 'POST',
+        method: "POST",
         url: noStreamUrl,
         headers: {
-          'Host': apiHost,
-          'User-Agent': config.api.userAgent,
-          'Authorization': `Bearer ${token.access_token}`,
-          'Content-Type': 'application/json',
-          'Accept-Encoding': 'gzip'
+          Host: apiHost,
+          "User-Agent": config.api.userAgent,
+          Authorization: `Bearer ${token.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Encoding": "gzip",
         },
         data: testRequestBody,
-        timeout: 30000
+        timeout: 30000,
       });
       return { ok: true };
     } catch (error) {
-      const status = error.response?.status || error.status || error.statusCode || 500;
-      let errorBody = '';
+      const status =
+        error.response?.status || error.status || error.statusCode || 500;
+      let errorBody = "";
       try {
         const data = error.response?.data;
-        errorBody = typeof data === 'string' ? data : (data ? JSON.stringify(data) : error.message);
+        errorBody =
+          typeof data === "string"
+            ? data
+            : data
+              ? JSON.stringify(data)
+              : error.message;
       } catch {
-        errorBody = error.message || '未知错误';
+        errorBody = error.message || "未知错误";
       }
 
       // 403 且非 "The caller does not have permission"（后者是上下文超限，非权限问题）
       if (status === 403) {
-        const isContextLimit = String(errorBody).includes('The caller does not');
+        const isContextLimit = String(errorBody).includes(
+          "The caller does not",
+        );
         if (!isContextLimit) {
           return { ok: false, status, message: errorBody };
         }
@@ -1154,12 +1264,12 @@ class TokenManager {
     try {
       const tokenData = await this.findTokenById(tokenId);
       if (!tokenData) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
       // 如果 token 已经启用，直接返回
       if (tokenData.enable !== false) {
-        return { success: true, message: 'Token已处于启用状态' };
+        return { success: true, message: "Token已处于启用状态" };
       }
 
       log.info(`[启用检测] 正在测试 token ${tokenId} 的可用性...`);
@@ -1170,8 +1280,13 @@ class TokenManager {
       } catch (error) {
         const statusCode = error.statusCode || 500;
         if (statusCode === 403 || statusCode === 400) {
-          log.warn(`[启用检测] token ${tokenId} 刷新失败(${statusCode}): ${error.message}`);
-          return { success: false, message: `凭证不可用，刷新失败(${statusCode}): ${error.message}` };
+          log.warn(
+            `[启用检测] token ${tokenId} 刷新失败(${statusCode}): ${error.message}`,
+          );
+          return {
+            success: false,
+            message: `凭证不可用，刷新失败(${statusCode}): ${error.message}`,
+          };
         }
         // 其他错误（如网络问题），也返回失败但提示不同
         log.warn(`[启用检测] token ${tokenId} 刷新失败: ${error.message}`);
@@ -1180,22 +1295,33 @@ class TokenManager {
 
       // 步骤2: 尝试获取 projectId（验证账号权限）
       try {
-        const {projectId, sub} = await this.fetchProjectId(tokenData) || {};
+        const { projectId, sub } = (await this.fetchProjectId(tokenData)) || {};
         if (projectId) {
           tokenData.projectId = projectId;
           tokenData.sub = sub;
         } else if (!tokenData.projectId && !config.skipProjectIdFetch) {
           log.warn(`[启用检测] token ${tokenId} 无法获取 projectId`);
-          return { success: false, message: '凭证不可用: 无法获取 projectId，该账号可能不支持 Code Assist' };
+          return {
+            success: false,
+            message:
+              "凭证不可用: 无法获取 projectId，该账号可能不支持 Code Assist",
+          };
         }
       } catch (error) {
         const statusCode = error.statusCode || 500;
         if (statusCode === 403 || statusCode === 401) {
-          log.warn(`[启用检测] token ${tokenId} 权限验证失败(${statusCode}): ${error.message}`);
-          return { success: false, message: `凭证不可用，权限验证失败(${statusCode}): ${error.message}` };
+          log.warn(
+            `[启用检测] token ${tokenId} 权限验证失败(${statusCode}): ${error.message}`,
+          );
+          return {
+            success: false,
+            message: `凭证不可用，权限验证失败(${statusCode}): ${error.message}`,
+          };
         }
         // 非致命错误，继续启用（可能只是暂时性网络问题）
-        log.warn(`[启用检测] token ${tokenId} 获取 projectId 时出现非致命错误: ${error.message}，继续启用`);
+        log.warn(
+          `[启用检测] token ${tokenId} 获取 projectId 时出现非致命错误: ${error.message}，继续启用`,
+        );
       }
 
       // 步骤3: 发送测试消息，验证 API 调用是否会触发 403
@@ -1203,10 +1329,12 @@ class TokenManager {
         log.info(`[启用检测] 正在发送测试消息验证 API 可用性...`);
         const testResult = await this._sendTestMessage(tokenData);
         if (!testResult.ok) {
-          log.warn(`[启用检测] token ${tokenId} 测试消息失败(${testResult.status}): ${testResult.message}`);
+          log.warn(
+            `[启用检测] token ${tokenId} 测试消息失败(${testResult.status}): ${testResult.message}`,
+          );
           return {
             success: false,
-            message: `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`
+            message: `凭证不可用，API 测试失败(${testResult.status}): ${testResult.message}`,
           };
         }
         log.info(`[启用检测] token ${tokenId} 测试消息通过`);
@@ -1218,15 +1346,22 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const salt = await this.store.getSalt();
 
-      const index = allTokens.findIndex(token =>
-        generateTokenId(token.refresh_token, salt) === tokenId
+      const index = allTokens.findIndex(
+        (token) => generateTokenId(token.refresh_token, salt) === tokenId,
       );
 
       if (index === -1) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
-      const updates = { enable: true, disableReason: null, disableTime: null };
+      const updates = {
+        enable: true,
+        disableReason: null,
+        disableTime: null,
+        lastError: null,
+        lastErrorTime: null,
+        lastErrorStage: null,
+      };
       if (tokenData.projectId) updates.projectId = tokenData.projectId;
       if (tokenData.sub) updates.sub = tokenData.sub;
 
@@ -1234,13 +1369,12 @@ class TokenManager {
       await this.store.writeAll(allTokens);
 
       await this.reload();
-      return { success: true, message: 'Token启用成功' };
+      return { success: true, message: "Token启用成功" };
     } catch (error) {
-      log.error('启用Token失败:', error.message);
+      log.error("启用Token失败:", error.message);
       return { success: false, message: `启用失败: ${error.message}` };
     }
   }
-
 
   /**
    * 根据 tokenId 删除 token
@@ -1252,20 +1386,20 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const salt = await this.store.getSalt();
 
-      const filteredTokens = allTokens.filter(token =>
-        generateTokenId(token.refresh_token, salt) !== tokenId
+      const filteredTokens = allTokens.filter(
+        (token) => generateTokenId(token.refresh_token, salt) !== tokenId,
       );
 
       if (filteredTokens.length === allTokens.length) {
-        return { success: false, message: 'Token不存在' };
+        return { success: false, message: "Token不存在" };
       }
 
       await this.store.writeAll(filteredTokens);
 
       await this.reload();
-      return { success: true, message: 'Token删除成功' };
+      return { success: true, message: "Token删除成功" };
     } catch (error) {
-      log.error('删除Token失败:', error.message);
+      log.error("删除Token失败:", error.message);
       return { success: false, message: error.message };
     }
   }
@@ -1278,13 +1412,13 @@ class TokenManager {
   async refreshTokenById(tokenId) {
     const tokenData = await this.findTokenById(tokenId);
     if (!tokenData) {
-      throw new TokenError('Token不存在', null, 404);
+      throw new TokenError("Token不存在", null, 404);
     }
 
     const refreshedToken = await this.refreshToken(tokenData);
     return {
       expires_in: refreshedToken.expires_in,
-      timestamp: refreshedToken.timestamp
+      timestamp: refreshedToken.timestamp,
     };
   }
 
@@ -1319,7 +1453,7 @@ class TokenManager {
       strategy: this.rotationStrategy,
       requestCount: this.requestCountPerToken,
       currentIndex: this.currentIndex,
-      tokenCounts: Object.fromEntries(this.tokenRequestCounts)
+      tokenCounts: Object.fromEntries(this.tokenRequestCounts),
     };
   }
 }

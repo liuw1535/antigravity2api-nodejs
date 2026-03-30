@@ -339,6 +339,20 @@ function renderGeminiCliTokens(tokens) {
       const safeEmailJs = escapeJs(token.email || "");
       const safeProjectId = escapeHtml(token.projectId || "");
       const hasProjectId = !!token.projectId;
+      const lastError = token.lastError ? escapeHtml(token.lastError) : "";
+      const lastErrorTimeStr = token.lastErrorTime
+        ? new Date(token.lastErrorTime).toLocaleString("zh-CN")
+        : "";
+      const lastErrorStageLabel =
+        token.lastErrorStage === "startup_refresh"
+          ? "启动检测"
+          : token.lastErrorStage === "disable"
+            ? "禁用"
+            : token.lastErrorStage === "manual"
+              ? "手动"
+              : token.lastErrorStage === "request"
+                ? "请求"
+                : token.lastErrorStage || "";
 
       return `
         <div class="token-card ${!token.enable ? "disabled" : ""}" id="geminicli-card-${escapeHtml(cardId)}">
@@ -353,6 +367,7 @@ function renderGeminiCliTokens(tokens) {
                     <span class="token-id">#${tokenNumber}</span>
                 </div>
             </div>
+            ${lastError ? `<div class="token-error-detail">🧾 ${lastError}${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class=\"token-error-meta\">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}</div>` : ""}
             <div class="token-info">
                 <div class="info-row editable sensitive-row" onclick="editGeminiCliField(event, '${safeTokenId}', 'email', '${safeEmailJs}')" title="点击编辑">
                     <span class="info-label">📧</span>
