@@ -1034,7 +1034,7 @@ function renderTokens(tokens) {
                     <span class="token-id">#${tokenNumber}</span>
                 </div>
             </div>
-            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? "禁用时间: " + disableTimeStr : ""}">⚠️ ${disableReason}${disableTimeStr ? " (" + disableTimeStr + ")" : ""}</div>` : ""}
+            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? "禁用时间: " + disableTimeStr : ""}">⚠️ ${disableReason}${disableTimeStr ? " (" + disableTimeStr + ")" : ""}</div>${render403ActionUrls(token.disableReason || "")}` : ""}
             <div class="token-info">
                 <div class="info-row editable sensitive-row" onclick="editField(event, '${safeTokenId}', 'projectId', '${safeProjectIdJs}')" title="点击编辑">
                     <span class="info-label">📦</span>
@@ -1318,6 +1318,7 @@ function showTokenDetail(tokenId) {
                     ${lastError}
                     ${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class="token-error-meta">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}
                 </div>
+                ${render403ActionUrls(token.lastError || '')}
             </div>
             `
                 : ""
@@ -1328,6 +1329,7 @@ function showTokenDetail(tokenId) {
             <div class="form-group compact">
                 <label>⚠️ 禁用原因</label>
                 <div class="token-disable-detail" style="padding: 0.5rem; background: var(--danger-bg, rgba(220,53,69,0.1)); border-radius: 6px; font-size: 0.85rem; color: var(--danger, #dc3545); word-break: break-all; max-height: 8em; overflow-y: auto;">${disableReason}${disableTimeStr ? '<br><span style="color: var(--text-light); font-size: 0.8rem;">禁用时间: ' + disableTimeStr + "</span>" : ""}</div>
+                ${render403ActionUrls(token.disableReason || '')}
             </div>
             `
                 : ""

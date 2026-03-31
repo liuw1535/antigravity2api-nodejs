@@ -396,8 +396,8 @@ function renderGeminiCliTokens(tokens) {
                     <span class="token-id">#${tokenNumber}</span>
                 </div>
             </div>
-            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? "禁用时间: " + disableTimeStr : ""}">⚠️ ${disableReason}${disableTimeStr ? " (" + disableTimeStr + ")" : ""}</div>` : ""}
-            ${lastError ? `<div class="token-error-detail">🧾 ${lastError}${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class=\"token-error-meta\">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}</div>` : ""}
+            ${!token.enable && disableReason ? `<div class="token-disable-reason" title="${disableTimeStr ? "禁用时间: " + disableTimeStr : ""}">⚠️ ${disableReason}${disableTimeStr ? " (" + disableTimeStr + ")" : ""}</div>${render403ActionUrls(token.disableReason || "")}` : ""}
+            ${lastError ? `<div class="token-error-detail">🧾 ${lastError}${lastErrorTimeStr || lastErrorStageLabel ? `<br><span class=\"token-error-meta\">${lastErrorTimeStr ? "记录时间: " + lastErrorTimeStr : ""}${lastErrorTimeStr && lastErrorStageLabel ? " · " : ""}${lastErrorStageLabel ? "来源: " + lastErrorStageLabel : ""}</span>` : ""}</div>${render403ActionUrls(token.lastError || "")}` : ""}
             <div class="token-info">
                 <div class="info-row editable sensitive-row" onclick="editGeminiCliField(event, '${safeTokenId}', 'email', '${safeEmailJs}')" title="点击编辑">
                     <span class="info-label">📧</span>
