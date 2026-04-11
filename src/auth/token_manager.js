@@ -52,19 +52,19 @@ class TokenManager {
       // 2. 清空池并重新加载
       this.pool.clear();
 
-      // 3. 过滤启用的 token 并添加必要属性
-      const enabledTokens = tokenArray
-        .filter(token => token.enable !== false)
-        .map(token => ({
-          ...token,
-          sessionId: generateSessionId(),
-          instanceId: generateInstanceId(),
-          deviceId: randomUUID(),
-          sub: token?.sub || 'g1-pro-tier'
-        }));
+      // 3. 为所有 token 添加必要属性（包括禁用的token，以便前端显示）
+      const tokensWithMetadata = tokenArray.map(token => ({
+        ...token,
+        sessionId: generateSessionId(),
+        instanceId: generateInstanceId(),
+        deviceId: randomUUID(),
+        sub: token?.sub || 'g1-pro-tier',
+        // 确保 enable 字段有默认值
+        enable: token.enable !== undefined ? token.enable : true
+      }));
 
-      // 4. 批量添加到池中
-      await this.pool.addAll(enabledTokens);
+      // 4. 批量添加到池中（包括禁用的token）
+      await this.pool.addAll(tokensWithMetadata);
 
       // 5. 加载轮询策略配置
       this._loadRotationConfig();
@@ -76,19 +76,22 @@ class TokenManager {
 
       // 7. 日志输出
       const poolSize = this.pool.size();
+      const enabledCount = this.pool.getEnabledIds().length;
+      const disabledCount = poolSize - enabledCount;
+      
       if (poolSize === 0) {
         log.warn('⚠ 暂无可用账号，请使用以下方式添加：');
         log.warn('  方式1: 运行 npm run login 命令登录');
         log.warn('  方式2: 访问前端管理页面添加账号');
       } else {
-        log.info(`成功加载 ${poolSize} 个可用token`);
+        log.info(`成功加载 ${poolSize} 个token (启用: ${enabledCount}, 禁用: ${disabledCount})`);
         if (this.rotationStrategyName === RotationStrategy.REQUEST_COUNT) {
           log.info(`轮询策略: ${this.rotationStrategyName}, 每token请求 ${this.requestCountPerToken} 次后切换`);
         } else {
           log.info(`轮询策略: ${this.rotationStrategyName}`);
         }
 
-        // 8. 并发刷新所有过期的 token
+        // 8. 并发刷新所有过期的启用token
         await this._refreshExpiredTokens();
       }
     } catch (error) {
