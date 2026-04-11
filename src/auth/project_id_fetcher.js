@@ -160,7 +160,7 @@ class ProjectIdFetcher {
       log.info('[loadCodeAssist] 用户已激活');
       const projectId = data.cloudaicompanionProject || null;
       let sub = data.currentTier.id || 'free-tier';
-      const sub2 = data.paidTier.id;
+      const sub2 = data?.paidTier?.id;
       if (sub2){
         sub = sub2;
       }
