@@ -333,9 +333,15 @@ class TokenManager {
       const allTokens = await this.store.readAll();
       const tokenId = await this.pool.generateTokenId(token);
 
-      const index = allTokens.findIndex(async t =>
-        await this.pool.generateTokenId(t) === tokenId
-      );
+      // 修复: 不能在 findIndex 中使用异步回调，需要先生成所有 tokenId
+      let index = -1;
+      for (let i = 0; i < allTokens.length; i++) {
+        const tid = await this.pool.generateTokenId(allTokens[i]);
+        if (tid === tokenId) {
+          index = i;
+          break;
+        }
+      }
 
       if (index !== -1) {
         allTokens[index] = token;
@@ -398,9 +404,16 @@ class TokenManager {
     // 2. 持久化
     try {
       const allTokens = await this.store.readAll();
-      const index = allTokens.findIndex(async t =>
-        await this.pool.generateTokenId(t) === tokenId
-      );
+      
+      // 修复: 不能在 findIndex 中使用异步回调，需要先生成所有 tokenId
+      let index = -1;
+      for (let i = 0; i < allTokens.length; i++) {
+        const tid = await this.pool.generateTokenId(allTokens[i]);
+        if (tid === tokenId) {
+          index = i;
+          break;
+        }
+      }
 
       if (index !== -1) {
         allTokens[index].enable = false;
