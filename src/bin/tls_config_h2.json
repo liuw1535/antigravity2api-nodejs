@@ -1,0 +1,113 @@
+{
+  "timeout": {
+    "connect": 30,
+    "read": 60
+  },
+  "proxy": {
+    "enabled": false,
+    "type": "http",
+    "url": "http://127.0.0.1:7897"
+  },
+  "dns": {
+    "servers": ["8.8.8.8:53"]
+  },
+  "fingerprint": {
+    "tls_version_min": "0x0303",
+    "tls_version_max": "0x0304",
+    "http2": false,
+    "grease": false,
+    "ciphers": [
+      "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+      "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+      "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+      "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+      "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+      "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+      "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+      "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+      "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+      "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+      "TLS_AES_128_GCM_SHA256",
+      "TLS_AES_256_GCM_SHA384",
+      "TLS_CHACHA20_POLY1305_SHA256"
+    ],
+    "compression_methods": [0],
+    "extensions": [
+      {
+        "name": "server_name"
+      },
+      {
+        "name": "ec_point_formats",
+        "data": {
+          "formats": [0]
+        }
+      },
+      {
+        "name": "renegotiation_info"
+      },
+      {
+        "name": "extended_master_secret"
+      },
+      {
+        "name": "signed_certificate_timestamp"
+      },
+      {
+        "name": "status_request"
+      },
+      {
+        "name": "supported_groups",
+        "data": {
+          "curves": ["X25519MLKEM768", "SecP256r1MLKEM768", "SecP384r1MLKEM1024", "X25519", "CurveP256", "CurveP384", "CurveP521"]
+        }
+      },
+      {
+        "name": "signature_algorithms",
+        "data": {
+          "algorithms": [
+            "PSSWithSHA256",
+            "ECDSAWithP256AndSHA256",
+            "Ed25519",
+            "PSSWithSHA384",
+            "PSSWithSHA512",
+            "PKCS1WithSHA256",
+            "PKCS1WithSHA384",
+            "PKCS1WithSHA512",
+            "ECDSAWithP384AndSHA384",
+            "ECDSAWithP521AndSHA512"
+          ]
+        }
+      },
+      {
+        "name": "signature_algorithms_cert",
+        "data": {
+          "algorithms": [
+            "PSSWithSHA256",
+            "ECDSAWithP256AndSHA256",
+            "Ed25519",
+            "PSSWithSHA384",
+            "PSSWithSHA512",
+            "PKCS1WithSHA256",
+            "PKCS1WithSHA384",
+            "PKCS1WithSHA512",
+            "ECDSAWithP384AndSHA384",
+            "ECDSAWithP521AndSHA512",
+            "PKCS1WithSHA1",
+            "ECDSAWithSHA1"
+          ]
+        }
+      },
+      {
+        "name": "supported_versions",
+        "data": {
+          "versions": ["0x0304", "0x0303"]
+        }
+      },
+      {
+        "name": "key_share",
+        "data": {
+          "groups": ["X25519MLKEM768", "X25519"]
+        }
+      }
+    ]
+  }
+}
