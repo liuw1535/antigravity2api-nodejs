@@ -89,6 +89,8 @@ let modelListCacheTime = 0;
 const DEFAULT_MODELS = Object.freeze([
   'claude-opus-4-6',
   'claude-opus-4-6-thinking',
+  'claude-opus-4-7',
+  'claude-opus-4-7-thinking',
   'claude-sonnet-4-6',
   'claude-sonnet-4-6-thinking',
   'gemini-3.1-pro-high',
