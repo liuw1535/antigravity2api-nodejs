@@ -10,7 +10,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
-import { setUsageMetrics } from '../../utils/usageStats.js';
+import { recordUsageAttemptFailure, setUsageMetrics } from '../../utils/usageStats.js';
 import {
   createOpenAIStreamChunk as createStreamChunk,
   createOpenAIChatCompletionResponse
@@ -75,6 +75,7 @@ export const handleOpenAIRequest = async (req, res) => {
     const createRetryOptions = (prefix) => ({
       loggerPrefix: prefix,
       onAttempt: () => tokenManager.recordRequest(token, model),
+      onAttemptFailure: () => recordUsageAttemptFailure(req, { model: model }),
       getTokenId: () => tokenId,
       modelId: model,
       refreshQuota,

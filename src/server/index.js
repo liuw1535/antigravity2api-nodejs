@@ -112,11 +112,15 @@ app.use((req, res, next) => {
   req.apiUsageMetrics = { model: inferredModel, usage: {} };
   const startedAt = Date.now();
   res.on('finish', () => {
+    const failedAttempts = Number(req.apiUsageMetrics?.failedAttempts) || 0;
+    const isFailedResponse = res.statusCode >= 400 || res.statusCode === 0;
     usageStats.record({
       timestamp: startedAt,
       statusCode: res.statusCode,
       model: req.apiUsageMetrics?.model || inferredModel,
       usage: req.apiUsageMetrics?.usage || {},
+      successCount: isFailedResponse ? 0 : 1,
+      failedCount: isFailedResponse ? Math.max(failedAttempts, 1) : failedAttempts,
       path: fullPath
     });
   });

@@ -33,7 +33,7 @@ import {
 import { setSignature, getSignature, shouldCacheSignature, isImageModel } from '../../utils/thoughtSignatureCache.js';
 import { getSafeRetries } from './common/retry.js';
 import { disableTimeouts } from './common/timeouts.js';
-import { setUsageMetrics } from '../../utils/usageStats.js';
+import { recordUsageAttemptFailure, setUsageMetrics } from '../../utils/usageStats.js';
 
 /**
  * 处理 Gemini CLI 格式的聊天请求（支持 OpenAI/Gemini/Claude 格式）
@@ -64,6 +64,11 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
 
     const { id, created } = createResponseMeta();
     const safeRetries = getSafeRetries(config.retryTimes);
+    const createRetryOptions = (prefix) => ({
+      loggerPrefix: prefix,
+      onAttempt: () => recordRequest(token),
+      onAttemptFailure: () => recordUsageAttemptFailure(req, { model: responseModel })
+    });
 
     // 假流式模式：使用非流式 API 获取数据，然后模拟流式输出
     const useFakeStreaming = features.fakeStreaming && stream;
@@ -86,8 +91,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         await with429Retry(
           () => generateStreamResponse(geminiRequest, token, actualModel, (data) => writer.onEvent(data)),
           safeRetries,
-          '[GeminiCLI] chat.stream ',
-          () => recordRequest(token)
+          createRetryOptions('[GeminiCLI] chat.stream ')
         );
 
         writer.finalize();
@@ -114,8 +118,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         const { content, reasoningContent, reasoningSignature, toolCalls, usage } = await with429Retry(
           () => generateNoStreamResponse(geminiRequest, token, actualModel),
           safeRetries,
-          '[GeminiCLI] chat.fake_stream ',
-          () => recordRequest(token)
+          createRetryOptions('[GeminiCLI] chat.fake_stream ')
         );
 
         // 缓存签名（假流式响应）
@@ -160,8 +163,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
       const { content, reasoningContent, reasoningSignature, toolCalls, usage } = await with429Retry(
         () => generateNoStreamResponse(geminiRequest, token, actualModel),
         safeRetries,
-        '[GeminiCLI] chat.no_stream ',
-        () => recordRequest(token)
+        createRetryOptions('[GeminiCLI] chat.no_stream ')
       );
 
       // 处理签名：优先使用 API 返回的签名，否则使用缓存的签名

@@ -11,7 +11,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
-import { setUsageMetrics } from '../../utils/usageStats.js';
+import { recordUsageAttemptFailure, setUsageMetrics } from '../../utils/usageStats.js';
 import { createClaudeResponse } from '../formatters/claude.js';
 import { validateIncomingChatRequest } from '../validators/chat.js';
 import { getSafeRetries } from './common/retry.js';
@@ -97,6 +97,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
     const createRetryOptions = (prefix) => ({
       loggerPrefix: prefix,
       onAttempt: () => tokenManager.recordRequest(token, model),
+      onAttemptFailure: () => recordUsageAttemptFailure(req, { model: model }),
       getTokenId: () => tokenId,
       modelId: model,
       refreshQuota,
