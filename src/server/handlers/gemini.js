@@ -10,7 +10,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
-import { setUsageMetrics } from '../../utils/usageStats.js';
+import { recordUsageAttemptFailure, setUsageMetrics } from '../../utils/usageStats.js';
 import { createGeminiResponse } from '../formatters/gemini.js';
 import { validateIncomingChatRequest } from '../validators/chat.js';
 import { getSafeRetries } from './common/retry.js';
@@ -141,6 +141,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
     const createRetryOptions = (prefix) => ({
       loggerPrefix: prefix,
       onAttempt: () => tokenManager.recordRequest(token, modelName),
+      onAttemptFailure: () => recordUsageAttemptFailure(req, { model: modelName }),
       getTokenId: () => tokenId,
       modelId: modelName,
       refreshQuota,

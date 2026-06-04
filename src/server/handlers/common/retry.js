@@ -287,6 +287,10 @@ export async function with429Retry(fn, maxRetries, options = {}, legacyOnAttempt
       }
       return await fn(attempt, shouldUseCredits);
     } catch (error) {
+      if (typeof retryOptions.onAttemptFailure === 'function') {
+        retryOptions.onAttemptFailure(error, attempt);
+      }
+
       const status = getStatus(error);
       if (status !== 429 && status !== 503) {
         throw error;

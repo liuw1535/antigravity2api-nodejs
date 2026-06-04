@@ -21,6 +21,15 @@ function formatCompactNumber(value) {
     return formatNumber(number);
 }
 
+function formatTokenNumber(value) {
+    const number = Number(value) || 0;
+    const absNumber = Math.abs(number);
+    if (absNumber >= 1000000000) return `${formatNumber(number / 1000000000, 2)}B`;
+    if (absNumber >= 1000000) return `${formatNumber(number / 1000000, 2)}M`;
+    if (absNumber >= 1000) return `${formatNumber(number / 1000, 2)}K`;
+    return formatNumber(number);
+}
+
 function initMonitorPage() {
     const savedDays = Number(localStorage.getItem('monitorRangeDays')) || 7;
     monitorState.rangeDays = [7, 14, 30].includes(savedDays) ? savedDays : 7;
@@ -108,10 +117,10 @@ function renderMonitorCards(data) {
         </div>
         <div class="monitor-card tokens">
             <div class="monitor-card-title">Tokens</div>
-            <div class="monitor-card-value">${formatCompactNumber(totals.totalTokens)}</div>
+            <div class="monitor-card-value">${formatTokenNumber(totals.totalTokens)}</div>
             <div class="monitor-card-sub">
-                <span>输入 ${formatCompactNumber(totals.inputTokens)}</span>
-                <span>输出 ${formatCompactNumber(totals.outputTokens)}</span>
+                <span>输入 ${formatTokenNumber(totals.inputTokens)}</span>
+                <span>输出 ${formatTokenNumber(totals.outputTokens)}</span>
             </div>
         </div>
         <div class="monitor-card tpm">
@@ -165,7 +174,7 @@ function renderModelUsageChart(data) {
             <div class="model-legend-item">
                 <span class="model-color" style="background:${colors[index % colors.length]}"></span>
                 <span class="model-name" title="${escapeHtml(item.model)}">${escapeHtml(item.model)}</span>
-                <span class="model-tokens">${formatCompactNumber(item.totalTokens)}</span>
+                <span class="model-tokens">${formatTokenNumber(item.totalTokens)}</span>
                 <span class="model-percent">${formatNumber(percent, 1)}%</span>
             </div>
         `;
@@ -175,7 +184,7 @@ function renderModelUsageChart(data) {
         <div class="donut-wrap">
             <div class="donut-chart" style="background: conic-gradient(${gradientStops});">
                 <div class="donut-hole">
-                    <span>${formatCompactNumber(totalTokens)}</span>
+                    <span>${formatTokenNumber(totalTokens)}</span>
                     <small>Tokens</small>
                 </div>
             </div>

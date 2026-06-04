@@ -28,6 +28,12 @@ function emptyTotals() {
   };
 }
 
+function toSafeCount(value, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Math.floor(number);
+}
+
 function normalizeUsage(usage = {}) {
   const inputTokens = Number(
     usage.prompt_tokens ??
@@ -103,30 +109,27 @@ class UsageStatsStore {
     return API_PATH_PREFIXES.some(prefix => path.startsWith(prefix));
   }
 
-  record({ timestamp = Date.now(), statusCode = 0, model = 'unknown', usage = {} } = {}) {
+  record({ timestamp = Date.now(), statusCode = 0, model = 'unknown', usage = {}, successCount, failedCount } = {}) {
     const day = startOfUtcDay(timestamp);
     const bucket = this.buckets.get(day) || createBucket(day);
     const normalizedUsage = normalizeUsage(usage);
     const modelName = typeof model === 'string' && model.trim() ? model.trim() : 'unknown';
     const failed = statusCode >= 400 || statusCode === 0;
+    const success = successCount === undefined ? (failed ? 0 : 1) : toSafeCount(successCount);
+    const failedAttempts = failedCount === undefined ? (failed ? 1 : 0) : toSafeCount(failedCount);
+    const requests = success + failedAttempts;
 
-    bucket.requests += 1;
-    if (failed) {
-      bucket.failed += 1;
-    } else {
-      bucket.success += 1;
-    }
+    bucket.requests += requests;
+    bucket.success += success;
+    bucket.failed += failedAttempts;
     bucket.inputTokens += normalizedUsage.inputTokens;
     bucket.outputTokens += normalizedUsage.outputTokens;
     bucket.totalTokens += normalizedUsage.totalTokens;
 
     const modelStats = bucket.models[modelName] || emptyTotals();
-    modelStats.requests += 1;
-    if (failed) {
-      modelStats.failed += 1;
-    } else {
-      modelStats.success += 1;
-    }
+    modelStats.requests += requests;
+    modelStats.success += success;
+    modelStats.failed += failedAttempts;
     modelStats.inputTokens += normalizedUsage.inputTokens;
     modelStats.outputTokens += normalizedUsage.outputTokens;
     modelStats.totalTokens += normalizedUsage.totalTokens;
@@ -209,6 +212,15 @@ export function setUsageMetrics(req, { model, usage } = {}) {
     ...(req.apiUsageMetrics || {}),
     ...(model !== undefined ? { model } : {}),
     ...(usage !== undefined ? { usage } : {})
+  };
+}
+
+export function recordUsageAttemptFailure(req, { model } = {}) {
+  if (!req) return;
+  req.apiUsageMetrics = {
+    ...(req.apiUsageMetrics || {}),
+    ...(model !== undefined ? { model } : {}),
+    failedAttempts: toSafeCount(req.apiUsageMetrics?.failedAttempts) + 1
   };
 }
 export default usageStats;
