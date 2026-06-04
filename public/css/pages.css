@@ -2347,3 +2347,278 @@ button.loading::after {
     color: white;
     transform: scale(1.1);
 }
+
+/* ==================== 监控中心样式 ==================== */
+#monitorPage {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+    overflow: auto;
+}
+
+#monitorPage.page-enter {
+    animation: pageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.monitor-top-bar,
+.monitor-chart-panel {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1.5px solid var(--border);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.monitor-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.monitor-top-bar h3,
+.monitor-chart-header h3 {
+    margin: 0 0 0.25rem;
+    color: var(--text);
+}
+
+.monitor-top-bar p,
+.monitor-chart-header p {
+    margin: 0;
+    color: var(--text-light);
+    font-size: 0.875rem;
+}
+
+.monitor-range {
+    display: inline-flex;
+    gap: 0.35rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.06);
+    flex-shrink: 0;
+}
+
+.monitor-range-btn {
+    border: 0;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-light);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.monitor-range-btn.active,
+.monitor-range-btn:hover {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 8px 18px rgba(79, 70, 229, 0.22);
+}
+
+.monitor-cards {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.monitor-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 132px;
+    padding: 1rem;
+    border-radius: 0.9rem;
+    border: 1.5px solid var(--border);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62));
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.monitor-card::after {
+    content: '';
+    position: absolute;
+    right: -32px;
+    top: -32px;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: rgba(79, 70, 229, 0.12);
+}
+
+.monitor-card-title {
+    color: var(--text-light);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.monitor-card-value {
+    margin-top: 0.55rem;
+    color: var(--text);
+    font-size: 1.9rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.monitor-card-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.monitor-card-sub .success { color: #059669; }
+.monitor-card-sub .danger { color: #dc2626; }
+.monitor-card.tokens::after { background: rgba(6, 182, 212, 0.14); }
+.monitor-card.tpm::after { background: rgba(16, 185, 129, 0.14); }
+.monitor-card.rpm::after { background: rgba(245, 158, 11, 0.14); }
+.monitor-card.rdp::after { background: rgba(236, 72, 153, 0.14); }
+
+.monitor-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.model-usage-chart {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    gap: 1.5rem;
+    align-items: center;
+    min-height: 300px;
+}
+
+.donut-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.donut-chart {
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06), 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.donut-hole {
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--text);
+    font-weight: 800;
+}
+
+.donut-hole small {
+    margin-top: 0.25rem;
+    color: var(--text-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.model-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.model-legend-item {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.7rem;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.model-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.model-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-weight: 700;
+}
+
+.model-tokens,
+.model-percent {
+    color: var(--text-light);
+    font-family: 'Ubuntu Mono', monospace;
+}
+
+.monitor-empty,
+.monitor-error {
+    grid-column: 1 / -1;
+    width: 100%;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-light);
+    border: 1.5px dashed var(--border);
+    border-radius: 0.85rem;
+}
+
+.monitor-error { color: #dc2626; }
+
+.monitor-card.skeleton {
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.14), rgba(148, 163, 184, 0.26), rgba(148, 163, 184, 0.14));
+    background-size: 220% 100%;
+    animation: shimmer 1.2s infinite linear;
+}
+
+@keyframes shimmer {
+    to { background-position: -220% 0; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .monitor-top-bar,
+    .monitor-chart-panel,
+    .monitor-card {
+        background: rgba(30, 41, 59, 0.9);
+    }
+
+    .model-legend-item,
+    .monitor-range {
+        background: rgba(255, 255, 255, 0.06);
+    }
+}
+
+@media (max-width: 1180px) {
+    .monitor-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .monitor-top-bar,
+    .monitor-chart-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .monitor-range {
+        justify-content: center;
+    }
+
+    .monitor-cards,
+    .model-usage-chart {
+        grid-template-columns: 1fr;
+    }
+}

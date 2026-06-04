@@ -33,6 +33,7 @@ import {
 import { setSignature, getSignature, shouldCacheSignature, isImageModel } from '../../utils/thoughtSignatureCache.js';
 import { getSafeRetries } from './common/retry.js';
 import { disableTimeouts } from './common/timeouts.js';
+import { setUsageMetrics } from '../../utils/usageStats.js';
 
 /**
  * 处理 Gemini CLI 格式的聊天请求（支持 OpenAI/Gemini/Claude 格式）
@@ -90,6 +91,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         );
 
         writer.finalize();
+        setUsageMetrics(req, { model: responseModel, usage: writer.getUsageData() });
 
         clearInterval(heartbeatTimer);
         endStream(res, false);
@@ -125,6 +127,7 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
           }
         }
 
+        setUsageMetrics(req, { model: responseModel, usage });
         writeGeminiCliFakeStreamResponse({
           format,
           res,
@@ -185,6 +188,8 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
           setSignature(null, actualModel, finalReasoningSignature, finalReasoningContent || ' ', { hasTools, isImageModel: isImage });
         }
       }
+
+      setUsageMetrics(req, { model: responseModel, usage });
 
       // 根据请求格式返回相应格式的响应
       if (format === 'gemini') {

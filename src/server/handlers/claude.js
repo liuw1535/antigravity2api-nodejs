@@ -11,6 +11,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
+import { setUsageMetrics } from '../../utils/usageStats.js';
 import { createClaudeResponse } from '../formatters/claude.js';
 import { validateIncomingChatRequest } from '../validators/chat.js';
 import { getSafeRetries } from './common/retry.js';
@@ -166,6 +167,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
           }));
 
           // 发送 message_delta 和 message_stop
+          setUsageMetrics(req, { model, usage });
           res.write(createClaudeStreamEvent('message_delta', {
             type: "message_delta",
             delta: { stop_reason: 'end_turn', stop_sequence: null },
@@ -319,6 +321,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
         }));
 
         // 发送 message_stop
+        setUsageMetrics(req, { model, usage: usageData });
         res.write(createClaudeStreamEvent('message_stop', {
           type: "message_stop"
         }));
@@ -372,6 +375,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
         );
 
         const stopReason = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+        setUsageMetrics(req, { model, usage: usageData });
         const response = createClaudeResponse(
           msgId,
           model,
@@ -408,6 +412,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
       );
 
       const stopReason = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+      setUsageMetrics(req, { model, usage });
       const response = createClaudeResponse(
         msgId,
         model,
