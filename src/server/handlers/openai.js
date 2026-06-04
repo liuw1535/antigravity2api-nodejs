@@ -10,6 +10,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
+import { setUsageMetrics } from '../../utils/usageStats.js';
 import {
   createOpenAIStreamChunk as createStreamChunk,
   createOpenAIChatCompletionResponse
@@ -111,6 +112,7 @@ export const handleOpenAIRequest = async (req, res) => {
             delta.thoughtSignature = reasoningSignature;
           }
           writeStreamData(res, createStreamChunk(id, created, model, delta));
+          setUsageMetrics(req, { model, usage });
           writeStreamData(res, { ...createStreamChunk(id, created, model, {}, 'stop'), usage });
         } else {
           let hasToolCall = false;
@@ -153,6 +155,7 @@ export const handleOpenAIRequest = async (req, res) => {
             createRetryOptions('chat.stream ')
           );
 
+          setUsageMetrics(req, { model, usage: usageData });
           writeStreamData(res, { ...createStreamChunk(id, created, model, {}, hasToolCall ? 'tool_calls' : 'stop'), usage: usageData });
         }
 
@@ -218,6 +221,7 @@ export const handleOpenAIRequest = async (req, res) => {
           }
         }
 
+        setUsageMetrics(req, { model, usage: usageData });
         res.json(createOpenAIChatCompletionResponse({
           id,
           created,
@@ -268,6 +272,7 @@ export const handleOpenAIRequest = async (req, res) => {
       }
 
       // 使用预构建的响应对象，减少内存分配
+      setUsageMetrics(req, { model, usage });
       res.json(createOpenAIChatCompletionResponse({
         id,
         created,

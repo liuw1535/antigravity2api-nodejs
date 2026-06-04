@@ -10,6 +10,7 @@ import logger from '../../utils/logger.js';
 import config from '../../config/config.js';
 import tokenManager from '../../auth/token_manager.js';
 import quotaManager from '../../auth/quota_manager.js';
+import { setUsageMetrics } from '../../utils/usageStats.js';
 import { createGeminiResponse } from '../formatters/gemini.js';
 import { validateIncomingChatRequest } from '../validators/chat.js';
 import { getSafeRetries } from './common/retry.js';
@@ -168,6 +169,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
             safeRetries,
             createRetryOptions('gemini.stream.image ')
           );
+          setUsageMetrics(req, { model: modelName, usage });
           const chunk = createGeminiResponse(content, null, reasoningSignature, null, 'STOP', usage, { passSignatureToClient: config.passSignatureToClient });
           writeStreamData(res, chunk);
           clearInterval(heartbeatTimer);
@@ -208,6 +210,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
 
         // 发送结束块和 usage
         const finishReason = hasToolCall ? "STOP" : "STOP"; // Gemini 工具调用也是 STOP
+        setUsageMetrics(req, { model: modelName, usage: usageData });
         const finalChunk = createGeminiResponse(null, null, null, null, finishReason, usageData, { passSignatureToClient: config.passSignatureToClient });
         writeStreamData(res, finalChunk);
 
@@ -260,6 +263,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
         );
 
         const finishReason = "STOP";
+        setUsageMetrics(req, { model: modelName, usage: usageData });
         const response = createGeminiResponse(content, reasoningContent || null, reasoningSignature, toolCalls, finishReason, usageData, { passSignatureToClient: config.passSignatureToClient });
         res.json(response);
       } catch (error) {
@@ -285,6 +289,7 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
       );
 
       const finishReason = toolCalls.length > 0 ? "STOP" : "STOP";
+      setUsageMetrics(req, { model: modelName, usage });
       const response = createGeminiResponse(content, reasoningContent, reasoningSignature, toolCalls, finishReason, usage, { passSignatureToClient: config.passSignatureToClient });
       res.json(response);
     }

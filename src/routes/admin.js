@@ -14,6 +14,7 @@ import { getModelsWithQuotas } from '../api/client.js';
 import { getEnvPath } from '../utils/paths.js';
 import ipBlockManager from '../utils/ipBlockManager.js';
 import dotenv from 'dotenv';
+import usageStats from '../utils/usageStats.js';
 
 const envPath = getEnvPath();
 
@@ -740,6 +741,18 @@ router.put('/rotation', cookieAuthMiddleware, (req, res) => {
     res.json({ success: true, message: '轮询策略已更新', data: tokenManager.getRotationConfig() });
   } catch (error) {
     logger.error('更新轮询配置失败:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== 监控中心 API ====================
+
+router.get('/monitor/usage', cookieAuthMiddleware, (req, res) => {
+  try {
+    const days = parseInt(req.query.days, 10) || 7;
+    res.json({ success: true, data: usageStats.getSummary(days) });
+  } catch (error) {
+    logger.error('获取监控统计失败:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });

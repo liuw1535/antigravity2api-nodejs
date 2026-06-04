@@ -16,6 +16,7 @@ import { getPublicDir, getRelativePath } from '../utils/paths.js';
 import { errorHandler } from '../utils/errors.js';
 import { getChunkPoolSize, clearChunkPool } from './stream.js';
 import ipBlockManager from '../utils/ipBlockManager.js';
+import usageStats from '../utils/usageStats.js';
 
 // 路由模块
 import adminRouter from '../routes/admin.js';
@@ -26,6 +27,14 @@ import claudeRouter from '../routes/claude.js';
 import cliRouter from '../routes/cli.js';
 
 const publicDir = getPublicDir();
+
+
+function inferUsageModel(req, fullPath) {
+  if (req.body?.model) return req.body.model;
+  const geminiMatch = fullPath.match(/^\/v1beta\/models\/([^:]+):/);
+  if (geminiMatch) return decodeURIComponent(geminiMatch[1]).replace(/^models\//, '');
+  return req.params?.model || 'unknown';
+}
 
 const app = express();
 
@@ -91,6 +100,28 @@ app.use((req, res, next) => {
 
 // SD API 路由
 app.use('/sdapi/v1', sdRouter);
+
+// ==================== 调用监控统计中间件 ====================
+app.use((req, res, next) => {
+  const fullPath = req.originalUrl.split('?')[0];
+  if (!usageStats.shouldTrackPath(fullPath)) {
+    return next();
+  }
+
+  const inferredModel = inferUsageModel(req, fullPath);
+  req.apiUsageMetrics = { model: inferredModel, usage: {} };
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    usageStats.record({
+      timestamp: startedAt,
+      statusCode: res.statusCode,
+      model: req.apiUsageMetrics?.model || inferredModel,
+      usage: req.apiUsageMetrics?.usage || {},
+      path: fullPath
+    });
+  });
+  next();
+});
 
 // ==================== API Key 验证中间件 ====================
 app.use((req, res, next) => {

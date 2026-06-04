@@ -14,6 +14,8 @@
             var classes = ['auth-checking'];
             if (currentTab === 'settings') classes.push('tab-settings');
             if (currentTab === 'logs') classes.push('tab-logs');
+            if (currentTab === 'geminicli') classes.push('tab-geminicli');
+            if (currentTab === 'monitor') classes.push('tab-monitor');
             document.documentElement.className = classes.join(' ');
             // 检测字体加载
             if ('fonts' in document) {
@@ -74,6 +76,10 @@
             display: none !important;
         }
 
+        html.tab-settings #monitorPage {
+            display: none !important;
+        }
+
         html.tab-settings .tab[data-tab="tokens"] {
             background: transparent !important;
             color: var(--text-light, #888) !important;
@@ -84,7 +90,8 @@
             color: white !important;
         }
 
-        html.tab-settings .tab[data-tab="logs"] {
+        html.tab-settings .tab[data-tab="logs"],
+        html.tab-settings .tab[data-tab="monitor"] {
             background: transparent !important;
             color: var(--text-light, #888) !important;
         }
@@ -105,6 +112,10 @@
             display: none !important;
         }
 
+        html.tab-logs #monitorPage {
+            display: none !important;
+        }
+
         html.tab-logs .tab[data-tab="tokens"] {
             background: transparent !important;
             color: var(--text-light, #888) !important;
@@ -120,7 +131,8 @@
             color: white !important;
         }
 
-        html.tab-logs .tab[data-tab="geminicli"] {
+        html.tab-logs .tab[data-tab="geminicli"],
+        html.tab-logs .tab[data-tab="monitor"] {
             background: transparent !important;
             color: var(--text-light, #888) !important;
         }
@@ -138,6 +150,10 @@
             display: none !important;
         }
 
+        html.tab-geminicli #monitorPage {
+            display: none !important;
+        }
+
         html.tab-geminicli #geminicliPage {
             display: block !important;
         }
@@ -152,7 +168,8 @@
             color: var(--text-light, #888) !important;
         }
 
-        html.tab-geminicli .tab[data-tab="logs"] {
+        html.tab-geminicli .tab[data-tab="logs"],
+        html.tab-geminicli .tab[data-tab="monitor"] {
             background: transparent !important;
             color: var(--text-light, #888) !important;
         }
@@ -164,6 +181,30 @@
 
         html.tab-settings #geminicliPage {
             display: none !important;
+        }
+
+        html.tab-monitor #tokensPage,
+        html.tab-monitor #settingsPage,
+        html.tab-monitor #logsPage,
+        html.tab-monitor #geminicliPage {
+            display: none !important;
+        }
+
+        html.tab-monitor #monitorPage {
+            display: flex !important;
+        }
+
+        html.tab-monitor .tab[data-tab="tokens"],
+        html.tab-monitor .tab[data-tab="geminicli"],
+        html.tab-monitor .tab[data-tab="settings"],
+        html.tab-monitor .tab[data-tab="logs"] {
+            background: transparent !important;
+            color: var(--text-light, #888) !important;
+        }
+
+        html.tab-monitor .tab[data-tab="monitor"] {
+            background: var(--primary, #4f46e5) !important;
+            color: white !important;
         }
 
         html.tab-settings .tab[data-tab="geminicli"] {
@@ -256,6 +297,8 @@
                         class="tab-icon">💎</span><span class="tab-text">CLI</span></button>
                 <button class="tab" data-tab="settings" onclick="switchTab('settings')"><span
                         class="tab-icon">⚙️</span><span class="tab-text">设置</span></button>
+                <button class="tab" data-tab="monitor" onclick="switchTab('monitor')"><span
+                        class="tab-icon">📊</span><span class="tab-text">监控</span></button>
                 <button class="tab" data-tab="logs" onclick="switchTab('logs')"><span
                         class="tab-icon">📋</span><span class="tab-text">日志</span></button>
             </div>
@@ -349,6 +392,33 @@
                             <div class="empty-state-text">暂无Gemini CLI Token</div>
                             <div class="empty-state-hint">点击上方OAuth按钮添加Token</div>
                         </div>
+                    </div>
+                </div>
+
+
+                <!-- 监控中心页面 -->
+                <div id="monitorPage" class="hidden">
+                    <div class="monitor-top-bar">
+                        <div>
+                            <h3>📊 监控中心</h3>
+                            <p>按时间范围统计 API 调用次数、Token 消耗和模型用量分布</p>
+                        </div>
+                        <div class="monitor-range" role="group" aria-label="监控时间范围">
+                            <button class="monitor-range-btn active" data-days="7" onclick="setMonitorRange(7)">最近7天</button>
+                            <button class="monitor-range-btn" data-days="14" onclick="setMonitorRange(14)">最近14天</button>
+                            <button class="monitor-range-btn" data-days="30" onclick="setMonitorRange(30)">最近30天</button>
+                        </div>
+                    </div>
+                    <div id="monitorCards" class="monitor-cards"></div>
+                    <div class="monitor-chart-panel">
+                        <div class="monitor-chart-header">
+                            <div>
+                                <h3>模型用量分布</h3>
+                                <p>按 Token 总数排名</p>
+                            </div>
+                            <button class="btn btn-sm btn-info" onclick="loadMonitorUsage()">↻ 刷新</button>
+                        </div>
+                        <div id="modelUsageChart" class="model-usage-chart"></div>
                     </div>
                 </div>
 
@@ -765,6 +835,7 @@
     <script src="js/config.js" defer></script>
     <script src="js/security.js" defer></script>
     <script src="js/logs.js" defer></script>
+    <script src="js/monitor.js" defer></script>
     <script src="js/main.js" defer></script>
 </body>
 
