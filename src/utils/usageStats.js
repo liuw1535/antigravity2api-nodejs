@@ -61,6 +61,8 @@ function normalizeUsage(usage = {}) {
 function createBucket(day) {
   return {
     day,
+    firstSeen: null,
+    lastSeen: null,
     ...emptyTotals(),
     models: {}
   };
@@ -79,7 +81,12 @@ class UsageStatsStore {
       const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
       for (const bucket of raw.buckets || []) {
         if (bucket?.day) {
-          this.buckets.set(Number(bucket.day), bucket);
+          const day = Number(bucket.day);
+          this.buckets.set(day, {
+            ...createBucket(day),
+            ...bucket,
+            models: bucket.models || {}
+          });
         }
       }
       this.prune();
@@ -112,6 +119,8 @@ class UsageStatsStore {
   record({ timestamp = Date.now(), statusCode = 0, model = 'unknown', usage = {}, successCount, failedCount } = {}) {
     const day = startOfUtcDay(timestamp);
     const bucket = this.buckets.get(day) || createBucket(day);
+    bucket.firstSeen = bucket.firstSeen === null ? timestamp : Math.min(bucket.firstSeen, timestamp);
+    bucket.lastSeen = bucket.lastSeen === null ? timestamp : Math.max(bucket.lastSeen, timestamp);
     const normalizedUsage = normalizeUsage(usage);
     const modelName = typeof model === 'string' && model.trim() ? model.trim() : 'unknown';
     const failed = statusCode >= 400 || statusCode === 0;
@@ -185,7 +194,18 @@ class UsageStatsStore {
       }
     }
 
-    const minutes = safeDays * 24 * 60;
+    const activeDailyBuckets = daily
+      .map(item => this.buckets.get(Date.parse(`${item.date}T00:00:00.000Z`)))
+      .filter(bucket => bucket && bucket.requests > 0);
+    const activeDays = activeDailyBuckets.length;
+    const activeMinutes = activeDailyBuckets.reduce((sum, bucket) => {
+      const dayStart = bucket.day;
+      const dayEnd = Math.min(dayStart + DAY_MS, now);
+      const observedEnd = bucket.lastSeen === null ? dayEnd : Math.min(bucket.lastSeen, dayEnd);
+      const observedStart = bucket.firstSeen === null ? dayStart : Math.min(Math.max(bucket.firstSeen, dayStart), dayEnd);
+      const elapsedMs = Math.max(60 * 1000, observedEnd - observedStart);
+      return sum + elapsedMs / (60 * 1000);
+    }, 0);
     const models = Array.from(modelMap.entries())
       .map(([model, stats]) => ({ model, ...stats }))
       .sort((a, b) => b.totalTokens - a.totalTokens || b.requests - a.requests);
@@ -194,9 +214,13 @@ class UsageStatsStore {
       rangeDays: safeDays,
       totals,
       averages: {
-        tpm: totals.totalTokens / minutes,
-        rpm: totals.requests / minutes,
-        rdp: totals.requests / safeDays
+        tpm: activeMinutes > 0 ? totals.totalTokens / activeMinutes : 0,
+        rpm: activeMinutes > 0 ? totals.requests / activeMinutes : 0,
+        rdp: activeDays > 0 ? totals.requests / activeDays : 0
+      },
+      averageBasis: {
+        activeDays,
+        activeMinutes
       },
       models,
       daily,
