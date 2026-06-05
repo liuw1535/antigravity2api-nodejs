@@ -30,6 +30,20 @@ function formatTokenNumber(value) {
     return formatNumber(number);
 }
 
+
+function formatAverageMinuteBasis(minutes) {
+    const number = Number(minutes) || 0;
+    if (number <= 0) return '暂无请求数据';
+    if (number >= 24 * 60) return `按 ${formatNumber(number / (24 * 60), 1)} 天有请求时长统计`;
+    if (number >= 60) return `按 ${formatNumber(number / 60, 1)} 小时有请求时长统计`;
+    return `按 ${formatNumber(Math.max(number, 1), 0)} 分钟有请求时长统计`;
+}
+
+function formatAverageDayBasis(days) {
+    const number = Number(days) || 0;
+    return number > 0 ? `按 ${formatNumber(number, 0)} 个有请求日期统计` : '暂无请求数据';
+}
+
 function initMonitorPage() {
     const savedDays = Number(localStorage.getItem('monitorRangeDays')) || 7;
     monitorState.rangeDays = [7, 14, 30].includes(savedDays) ? savedDays : 7;
@@ -106,6 +120,9 @@ function renderMonitorCards(data) {
 
     const totals = data.totals || {};
     const averages = data.averages || {};
+    const averageBasis = data.averageBasis || {};
+    const minuteBasisText = formatAverageMinuteBasis(averageBasis.activeMinutes);
+    const dayBasisText = formatAverageDayBasis(averageBasis.activeDays);
     cards.innerHTML = `
         <div class="monitor-card requests">
             <div class="monitor-card-title">请求数</div>
@@ -126,17 +143,17 @@ function renderMonitorCards(data) {
         <div class="monitor-card tpm">
             <div class="monitor-card-title">平均 TPM</div>
             <div class="monitor-card-value">${formatNumber(averages.tpm, 2)}</div>
-            <div class="monitor-card-sub"><span>每分钟 Token 数</span></div>
+            <div class="monitor-card-sub"><span>${minuteBasisText}</span></div>
         </div>
         <div class="monitor-card rpm">
             <div class="monitor-card-title">平均 RPM</div>
             <div class="monitor-card-value">${formatNumber(averages.rpm, 2)}</div>
-            <div class="monitor-card-sub"><span>每分钟请求数</span></div>
+            <div class="monitor-card-sub"><span>${minuteBasisText}</span></div>
         </div>
         <div class="monitor-card rdp">
             <div class="monitor-card-title">日均 RDP</div>
             <div class="monitor-card-value">${formatNumber(averages.rdp, 2)}</div>
-            <div class="monitor-card-sub"><span>每日请求数</span></div>
+            <div class="monitor-card-sub"><span>${dayBasisText}</span></div>
         </div>
     `;
 }
