@@ -42,12 +42,14 @@ function logMessage(level, ...args) {
   logWsServer.storeLog(level, message);
 }
 
-function logRequest(method, path, status, duration) {
+function logRequest(method, path, status, duration, model, tokens) {
   const statusColor = status >= 500 ? colors.red : status >= 400 ? colors.yellow : colors.green;
-  const message = `[${method}] - ${path} ${status} ${duration}ms`;
+  const modelInfo = model ? ` [${model}]` : '';
+  const tokensInfo = tokens ? ` tokens:${tokens}` : '';
+  const message = `[${method}] - ${path}${modelInfo} ${status} ${duration}ms${tokensInfo}`;
 
   // 输出到控制台
-  console.log(`${colors.cyan}[${method}]${colors.reset} - ${path} ${statusColor}${status}${colors.reset} ${colors.gray}${duration}ms${colors.reset}`);
+  console.log(`${colors.cyan}[${method}]${colors.reset} - ${path}${colors.cyan}${modelInfo}${colors.reset} ${statusColor}${status}${colors.reset} ${colors.gray}${duration}ms${colors.reset}${colors.yellow}${tokensInfo}${colors.reset}`);
 
   // 存储日志（根据状态码决定级别）
   const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'request';

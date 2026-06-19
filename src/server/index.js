@@ -83,7 +83,11 @@ app.use((req, res, next) => {
   if (!ignorePaths.some(p => fullPath.startsWith(p))) {
     const start = Date.now();
     res.on('finish', () => {
-      logger.request(req.method, fullPath, res.statusCode, Date.now() - start);
+      // 从请求体或 URL 参数中获取模型名称
+      const model = req.body?.model || req.params?.model || null;
+      // 从响应对象中获取 token 数量
+      const tokens = res.locals?.tokens || null;
+      logger.request(req.method, fullPath, res.statusCode, Date.now() - start, model, tokens);
     });
   }
   next();

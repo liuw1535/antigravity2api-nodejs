@@ -211,6 +211,11 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
         const finalChunk = createGeminiResponse(null, null, null, null, finishReason, usageData, { passSignatureToClient: config.passSignatureToClient });
         writeStreamData(res, finalChunk);
 
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         clearInterval(heartbeatTimer);
         endStream(res, false);
       } catch (error) {
@@ -260,6 +265,12 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
         );
 
         const finishReason = "STOP";
+
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         const response = createGeminiResponse(content, reasoningContent || null, reasoningSignature, toolCalls, finishReason, usageData, { passSignatureToClient: config.passSignatureToClient });
         res.json(response);
       } catch (error) {
@@ -285,6 +296,12 @@ export const handleGeminiRequest = async (req, res, modelName, isStream) => {
       );
 
       const finishReason = toolCalls.length > 0 ? "STOP" : "STOP";
+
+      // 存储 token 数量到 res.locals 供日志使用
+      if (usage) {
+        res.locals.tokens = usage.total_tokens || usage.completion_tokens;
+      }
+
       const response = createGeminiResponse(content, reasoningContent, reasoningSignature, toolCalls, finishReason, usage, { passSignatureToClient: config.passSignatureToClient });
       res.json(response);
     }

@@ -323,6 +323,11 @@ export const handleClaudeRequest = async (req, res, isStream) => {
           type: "message_stop"
         }));
 
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         clearInterval(heartbeatTimer);
         res.end();
       } catch (error) {
@@ -372,6 +377,12 @@ export const handleClaudeRequest = async (req, res, isStream) => {
         );
 
         const stopReason = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         const response = createClaudeResponse(
           msgId,
           model,
@@ -408,6 +419,12 @@ export const handleClaudeRequest = async (req, res, isStream) => {
       );
 
       const stopReason = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+
+      // 存储 token 数量到 res.locals 供日志使用
+      if (usage) {
+        res.locals.tokens = usage.total_tokens || usage.completion_tokens;
+      }
+
       const response = createClaudeResponse(
         msgId,
         model,
