@@ -151,7 +151,8 @@ export function isEnableThinking(modelName) {
   return modelName.includes('-thinking') ||
     modelName === 'gemini-2.5-pro' ||
     modelName.startsWith('gemini-3.1') ||
-    modelName.startsWith('gemini-3-pro-') ||
+    modelName.startsWith('gemini-3') ||
+    modelName.startsWith('gemini-pro') ||
     modelName === 'rev19-uic3-1p' ||
     modelName === 'gpt-oss-120b-medium';
 }

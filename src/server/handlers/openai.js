@@ -34,7 +34,7 @@ import {
 export const handleOpenAIRequest = async (req, res) => {
   const body = req.body || {};
   const { messages, model, stream = false, tools, ...params } = body;
-
+  //console.log(JSON.stringify(body, null, 2))
   try {
     const validation = validateIncomingChatRequest('openai', body);
     if (!validation.ok) {
@@ -100,7 +100,7 @@ export const handleOpenAIRequest = async (req, res) => {
         if (isImageModel) {
           const { content, usage, reasoningSignature } = await with429Retry(
             (attempt, shouldUseCredits) => {
-              const actualRequestBody = shouldUseCredits 
+              const actualRequestBody = shouldUseCredits
                 ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
                 : requestBody;
               return generateAssistantResponseNoStream(actualRequestBody, token);
@@ -121,7 +121,7 @@ export const handleOpenAIRequest = async (req, res) => {
 
           await with429Retry(
             (attempt, shouldUseCredits) => {
-              const actualRequestBody = shouldUseCredits 
+              const actualRequestBody = shouldUseCredits
                 ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
                 : requestBody;
               return generateAssistantResponse(actualRequestBody, token, (data) => {
@@ -186,7 +186,7 @@ export const handleOpenAIRequest = async (req, res) => {
       try {
         await with429Retry(
           (attempt, shouldUseCredits) => {
-            const actualRequestBody = shouldUseCredits 
+            const actualRequestBody = shouldUseCredits
               ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
               : requestBody;
             return generateAssistantResponse(actualRequestBody, token, (data) => {
@@ -248,7 +248,7 @@ export const handleOpenAIRequest = async (req, res) => {
 
       const { content, reasoningContent, reasoningSignature, toolCalls, usage } = await with429Retry(
         (attempt, shouldUseCredits) => {
-          const actualRequestBody = shouldUseCredits 
+          const actualRequestBody = shouldUseCredits
             ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
             : requestBody;
           return generateAssistantResponseNoStream(actualRequestBody, token);

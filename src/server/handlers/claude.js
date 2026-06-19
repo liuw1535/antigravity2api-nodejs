@@ -53,7 +53,7 @@ export const createClaudeStreamEvent = (eventType, data) => {
 export const handleClaudeRequest = async (req, res, isStream) => {
   const body = req.body || {};
   const { messages, model, system, tools, ...rawParams } = body;
-
+  //console.log(JSON.stringify(body, null, 2))
   try {
     const validation = validateIncomingChatRequest('claude', body);
     if (!validation.ok) {
@@ -142,7 +142,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
           // 生图模型：使用非流式获取结果后以流式格式返回
           const { content, usage } = await with429Retry(
             (attempt, shouldUseCredits) => {
-              const actualRequestBody = shouldUseCredits 
+              const actualRequestBody = shouldUseCredits
                 ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
                 : requestBody;
               return generateAssistantResponseNoStream(actualRequestBody, token);
@@ -185,7 +185,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
 
         await with429Retry(
           (attempt, shouldUseCredits) => {
-            const actualRequestBody = shouldUseCredits 
+            const actualRequestBody = shouldUseCredits
               ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
               : requestBody;
             return generateAssistantResponse(actualRequestBody, token, (data) => {
@@ -353,7 +353,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
       try {
         await with429Retry(
           (attempt, shouldUseCredits) => {
-            const actualRequestBody = shouldUseCredits 
+            const actualRequestBody = shouldUseCredits
               ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
               : requestBody;
             return generateAssistantResponse(actualRequestBody, token, (data) => {
@@ -403,7 +403,7 @@ export const handleClaudeRequest = async (req, res, isStream) => {
 
       const { content, reasoningContent, reasoningSignature, toolCalls, usage } = await with429Retry(
         (attempt, shouldUseCredits) => {
-          const actualRequestBody = shouldUseCredits 
+          const actualRequestBody = shouldUseCredits
             ? { ...requestBody, enabledCreditTypes: ["GOOGLE_ONE_AI"] }
             : requestBody;
           return generateAssistantResponseNoStream(actualRequestBody, token);
