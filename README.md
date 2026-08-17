@@ -4,7 +4,7 @@
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liuw1535/antigravity2api-nodejs&type=Date)](https://www.star-history.com/#liuw1535/antigravity2api-nodejs&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=liuw1535/antigravity2api-nodejs&type=Date)](https://star-history.dera.page/#liuw1535/antigravity2api-nodejs&Date)
 
 ## 功能特性
 
