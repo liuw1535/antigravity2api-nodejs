@@ -52,6 +52,7 @@ class FingerprintRequester {
     this.binDir = options.binDir || this._detectBinDir();
     this.binaryPath = options.binaryPath || this._detectBinary();
     this.configPath = options.configPath || join(__dirname, 'bin', 'config.json');
+    this.spawnProcess = options.spawnProcess || spawn;
     this.defaults = {
       timeout: options.timeout || 30, // seconds
       proxy: options.proxy || null,
@@ -165,7 +166,7 @@ class FingerprintRequester {
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.binaryPath);
+      const proc = this.spawnProcess(this.binaryPath);
       this.activeProcesses.add(proc);
       let headersParsed = false;
       let responseHeaders = {};
@@ -227,8 +228,11 @@ class FingerprintRequester {
             headersParsed = true;
             headerBuffer = null; // 释放内存
 
-            // Clear timeout for streaming responses
-            clearTimeout(timeoutId);
+            // Streaming responses manage their lifetime through the stream consumer.
+            // Non-stream requests keep the overall watchdog until the child exits.
+            if (onDownloadProgress) {
+              clearTimeout(timeoutId);
+            }
 
             // Process body part after headers
             if (bodyPart.length > 0) {
@@ -288,7 +292,7 @@ class FingerprintRequester {
 
         try {
           let bodyBuffer = Buffer.concat(bodyChunks);
-          
+
           // 检查是否需要解压（gzip / br / deflate）
           const contentEncoding = (responseHeaders['content-encoding'] || '').toLowerCase();
           if (!skipGzipDecompress && contentEncoding) {
@@ -301,10 +305,10 @@ class FingerprintRequester {
               try { bodyBuffer = await decompressDeflate(bodyBuffer); } catch { /* 解压失败保留原始数据 */ }
             }
           }
-          
+
           const body = bodyBuffer.toString('utf8');
           let parsedData = body;
-          
+
           if (responseType === 'json') {
             try {
               parsedData = JSON.parse(body);
@@ -320,7 +324,7 @@ class FingerprintRequester {
             headers: responseHeaders,
             config,
           };
-          
+
           if (!validateStatus(responseStatus)) {
             const error = new Error(`Request failed with status code ${responseStatus}`);
             error.code = responseStatus >= 500 ? 'ERR_BAD_RESPONSE' : 'ERR_BAD_REQUEST';
@@ -328,7 +332,7 @@ class FingerprintRequester {
             error.config = config;
             return reject(error);
           }
-          
+
           resolve(response);
         } catch (err) {
           const error = new Error(`Response processing failed: ${err.message}`);
@@ -417,7 +421,7 @@ class FingerprintRequester {
     const config = this._buildConfigFromOptions(url, options, false);
 
     const response = await this.request(config);
-    
+
     // 返回兼容 AntigravityRequester 的响应对象
     return {
       ok: response.status >= 200 && response.status < 300,
