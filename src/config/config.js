@@ -291,9 +291,9 @@ const DEFAULT_UPSTREAM_CANDIDATES = ['production', 'daily', 'sandbox'];
 const DEFAULT_IDE_VERSION = '1.22.2';
 
 const DEFAULT_API_UNLEASH = {
-    register: "https://antigravity-unleash.goog/api/client/register",
-    features: "https://antigravity-unleash.goog/api/client/features",
-    frontend: "https://antigravity-unleash.goog/api/frontend"
+  register: "https://antigravity-unleash.goog/api/client/register",
+  features: "https://antigravity-unleash.goog/api/client/features",
+  frontend: "https://antigravity-unleash.goog/api/frontend"
 }
 
 // Gemini CLI API 默认配置（upstream.json 不存在时的 hardcoded fallback）
@@ -340,7 +340,7 @@ function getActiveApiConfig(jsonConfig, upstreamCfg) {
     recordTrajectory: upstreamEndpoint.recordTrajectory || hardcodedEndpoint.recordTrajectory,
     recordCodeAssistMetrics: upstreamEndpoint.recordCodeAssistMetrics || hardcodedEndpoint.recordCodeAssistMetrics,
     host: upstreamEndpoint.host || hardcodedEndpoint.host,
-    userAgent: `antigravity/${ideVersion} windows/amd64`,
+    userAgent: `antigravity/hub/${ideVersion} windows/amd64`,
     ideVersion,
     unleash,
     upstreamCandidates,
@@ -526,7 +526,7 @@ export async function checkAndUpdateVersion() {
 
       // 更新内存中的配置
       config.api.ideVersion = latestVersion;
-      config.api.userAgent = `antigravity/${latestVersion} windows/amd64`;
+      config.api.userAgent = `antigravity/hub/${latestVersion} windows/amd64`;
 
       log.info(`✓ 版本已更新为 ${latestVersion}`);
     } else {
