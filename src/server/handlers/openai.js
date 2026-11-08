@@ -154,6 +154,10 @@ export const handleOpenAIRequest = async (req, res) => {
           );
 
           writeStreamData(res, { ...createStreamChunk(id, created, model, {}, hasToolCall ? 'tool_calls' : 'stop'), usage: usageData });
+          // 存储 token 数量到 res.locals 供日志使用
+          if (usageData) {
+            res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+          }
         }
 
         clearInterval(heartbeatTimer);
@@ -218,6 +222,11 @@ export const handleOpenAIRequest = async (req, res) => {
           }
         }
 
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         res.json(createOpenAIChatCompletionResponse({
           id,
           created,
@@ -265,6 +274,11 @@ export const handleOpenAIRequest = async (req, res) => {
         } else {
           message.tool_calls = toolCalls.map(({ thoughtSignature, ...rest }) => rest);
         }
+      }
+
+      // 存储 token 数量到 res.locals 供日志使用
+      if (usage) {
+        res.locals.tokens = usage.total_tokens || usage.completion_tokens;
       }
 
       // 使用预构建的响应对象，减少内存分配

@@ -91,6 +91,12 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
 
         writer.finalize();
 
+        // 存储 token 数量到 res.locals 供日志使用
+        const usageData = writer.getUsageData();
+        if (usageData) {
+          res.locals.tokens = usageData.total_tokens || usageData.completion_tokens;
+        }
+
         clearInterval(heartbeatTimer);
         endStream(res, false);
       } catch (error) {
@@ -138,6 +144,11 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
           usage
         });
 
+        // 存储 token 数量到 res.locals 供日志使用
+        if (usage) {
+          res.locals.tokens = usage.total_tokens || usage.completion_tokens;
+        }
+
         clearInterval(heartbeatTimer);
         endStream(res, false);
       } catch (error) {
@@ -184,6 +195,11 @@ export const handleGeminiCliRequest = async (req, res, forceFormat = null) => {
         if (shouldCacheSignature({ hasTools, isImageModel: isImage })) {
           setSignature(null, actualModel, finalReasoningSignature, finalReasoningContent || ' ', { hasTools, isImageModel: isImage });
         }
+      }
+
+      // 存储 token 数量到 res.locals 供日志使用
+      if (usage) {
+        res.locals.tokens = usage.total_tokens || usage.completion_tokens;
       }
 
       // 根据请求格式返回相应格式的响应
